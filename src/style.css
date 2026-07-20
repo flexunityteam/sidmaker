@@ -1,0 +1,126 @@
+/* C64 boot-screen palette: light blue border, dark blue screen */
+:root {
+  --c64-border: #6c5eb5;
+  --c64-screen: #40318d;
+  --c64-text: #a29ddb;
+  --c64-bright: #e0dcff;
+  --c64-accent: #9ae29b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--c64-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Courier New', Courier, monospace;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.screen {
+  background: var(--c64-screen);
+  color: var(--c64-text);
+  width: min(680px, 92vw);
+  padding: 2.5rem 2rem;
+  letter-spacing: 0.08em;
+  line-height: 1.7;
+  box-shadow: 0 0 0 4px var(--c64-screen);
+}
+
+.screen h1 {
+  color: var(--c64-bright);
+  font-size: 1.3rem;
+  margin: 0 0 0.2rem;
+  text-align: center;
+}
+
+.screen .subtitle {
+  text-align: center;
+  font-size: 0.75rem;
+  margin: 0 0 1.5rem;
+}
+
+.control-group {
+  margin-bottom: 1rem;
+}
+
+.control-group .label {
+  font-size: 0.75rem;
+  margin-bottom: 0.3rem;
+}
+
+.options {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+button {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  background: var(--c64-screen);
+  color: var(--c64-text);
+  border: 2px solid var(--c64-text);
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+}
+
+button:hover {
+  color: var(--c64-bright);
+  border-color: var(--c64-bright);
+}
+
+button.selected {
+  background: var(--c64-text);
+  color: var(--c64-screen);
+}
+
+.transport {
+  display: flex;
+  gap: 0.75rem;
+  margin: 1.5rem 0 1rem;
+}
+
+.transport button {
+  flex: 1;
+  padding: 0.8rem 0;
+  font-size: 1rem;
+}
+
+#generate {
+  color: var(--c64-accent);
+  border-color: var(--c64-accent);
+}
+
+#generate:hover {
+  background: var(--c64-accent);
+  color: var(--c64-screen);
+}
+
+.status {
+  font-size: 0.75rem;
+  min-height: 3em;
+  white-space: pre-line;
+}
+
+.cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1em;
+  background: var(--c64-text);
+  vertical-align: text-bottom;
+  animation: blink 1s steps(1) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}

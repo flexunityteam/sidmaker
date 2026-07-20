@@ -1,0 +1,77 @@
+import { describe, expect, it } from 'vitest';
+import { generateSong } from './generate';
+import type { GenerateOptions } from './generate';
+import { MOODS } from './moods';
+import type { MoodName } from './moods';
+import { SCALES, scalePitchClasses } from './theory';
+
+const ALL_MOODS = Object.keys(MOODS) as MoodName[];
+
+const baseOptions = (mood: MoodName): GenerateOptions => ({ mood, tempo: 'mid', length: 'short' });
+
+describe('generateSong', () => {
+  it('is deterministic: same seed and options produce an identical song', () => {
+    const a = generateSong(12345, baseOptions('hero'));
+    const b = generateSong(12345, baseOptions('hero'));
+    expect(a).toEqual(b);
+  });
+
+  it('different seeds produce different songs', () => {
+    const a = generateSong(1, baseOptions('hero'));
+    const b = generateSong(2, baseOptions('hero'));
+    expect(a).not.toEqual(b);
+  });
+
+  it.each(ALL_MOODS)('%s: has 3 tracks and all events inside the song length', (mood) => {
+    const song = generateSong(99, baseOptions(mood));
+    expect(song.tracks).toHaveLength(3);
+    expect(song.lengthTicks).toBeGreaterThan(0);
+    for (const track of song.tracks) {
+      expect(track.events.length).toBeGreaterThan(0);
+      for (const e of track.events) {
+        expect(e.tick).toBeGreaterThanOrEqual(0);
+        expect(e.tick + e.durationTicks).toBeLessThanOrEqual(song.lengthTicks);
+      }
+    }
+  });
+
+  it.each(ALL_MOODS)('%s: all pitched notes stay in the chosen scale', (mood) => {
+    for (const seed of [7, 42, 1337]) {
+      const song = generateSong(seed, baseOptions(mood));
+      const scale = SCALES[MOODS[mood].scale];
+      // The tonic is not exposed on Song, but every scale contains its tonic
+      // pitch class, so derive the pitch-class set from the bass track root.
+      // Instead of guessing, assert relative consistency: collect all pitch
+      // classes from melodic tracks and check they fit some rotation of the
+      // scale — with the arp track's first note treated as a chord tone.
+      const pitchClasses = new Set<number>();
+      for (const track of song.tracks) {
+        for (const e of track.events) {
+          if ((e.instrument ?? track.instrument).waveform === 'noise') continue;
+          if (e.midiNote < 45 && (e.instrument?.adsr.s ?? 1) === 0) continue; // kick
+          pitchClasses.add(e.midiNote % 12);
+        }
+      }
+      const fitsSomeTonic = Array.from({ length: 12 }, (_, tonic) => tonic).some((tonic) => {
+        const allowed = scalePitchClasses(tonic, scale);
+        return Array.from(pitchClasses).every((pc) => allowed.has(pc));
+      });
+      expect(fitsSomeTonic, `seed ${seed}`).toBe(true);
+    }
+  });
+
+  it('long songs are longer than short songs', () => {
+    const short = generateSong(5, { mood: 'chill', tempo: 'mid', length: 'short' });
+    const long = generateSong(5, { mood: 'chill', tempo: 'mid', length: 'long' });
+    expect(long.lengthTicks).toBeGreaterThan(short.lengthTicks);
+  });
+
+  it('bpm respects the mood/tempo range', () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const song = generateSong(seed, { mood: 'hero', tempo: 'fast', length: 'short' });
+      const [min, max] = MOODS.hero.bpm.fast;
+      expect(song.bpm).toBeGreaterThanOrEqual(min);
+      expect(song.bpm).toBeLessThanOrEqual(max);
+    }
+  });
+});
