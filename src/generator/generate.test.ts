@@ -75,3 +75,41 @@ describe('generateSong', () => {
     }
   });
 });
+
+describe('musical features', () => {
+  it.each(ALL_MOODS)('%s: arp track carries a 4-note chord on every event', (mood) => {
+    const song = generateSong(3, baseOptions(mood));
+    const arp = song.tracks.find((t) => t.name === 'arp')!;
+    expect(arp.events.length).toBeGreaterThan(0);
+    for (const e of arp.events) {
+      expect(e.arpNotes).toBeDefined();
+      expect(e.arpNotes!.length).toBe(4);
+    }
+  });
+
+  it('leads use portamento glides at least sometimes', () => {
+    let glides = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const lead = generateSong(seed, baseOptions('hero')).tracks.find((t) => t.name === 'lead')!;
+      glides += lead.events.filter((e) => e.glideFromMidi != null).length;
+    }
+    expect(glides).toBeGreaterThan(0);
+  });
+
+  it('bass+drums voice includes noise percussion (hats/snare)', () => {
+    const voice = generateSong(5, baseOptions('bubbly')).tracks.find((t) => t.name === 'bass+drums')!;
+    const noiseHits = voice.events.filter((e) => e.instrument?.waveform === 'noise');
+    expect(noiseHits.length).toBeGreaterThan(0);
+  });
+
+  it('intro bars have no drums (a build-up before the beat drops)', () => {
+    const song = generateSong(9, baseOptions('hero'));
+    const voice = song.tracks.find((t) => t.name === 'bass+drums')!;
+    const barTicks = song.ticksPerBeat * 4;
+    // First two bars are the intro; no kick/snare/hat there.
+    const introPercussion = voice.events.filter(
+      (e) => e.tick < 2 * barTicks && e.instrument?.adsr.s === 0,
+    );
+    expect(introPercussion.length).toBe(0);
+  });
+});

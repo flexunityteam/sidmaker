@@ -6,24 +6,26 @@ export type AudioContextFactory = () => AudioContext;
  * Web Audio playback engine. Knows nothing about music theory — it just
  * schedules NoteEvents with a standard lookahead loop and loops the song.
  *
- * Teardown is deterministic: every scheduled source node is tracked and
- * stopped on the audio clock in stop(), with no reliance on wall-clock
- * timers. The master/filter graph is created once and reused, so stopping
- * and re-generating can never leave a previous song audible.
+ * Synthesis aims for the classic SID character: pulse voices with a real duty
+ * cycle, delayed vibrato on leads, portamento slides, and frame-rate chord
+ * arpeggios rendered on a single stepping oscillator.
+ *
+ * Teardown is deterministic: every scheduled source is tracked and stopped on
+ * the audio clock in stop(), with no reliance on wall-clock timers, so a new
+ * song can never leave a previous one audible.
  */
 export class Player {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private filter: BiquadFilterNode | null = null;
   private noiseBuffer: AudioBuffer | null = null;
+  private pulseWaves = new Map<number, PeriodicWave>();
 
   private song: Song | null = null;
   private timer: number | null = null;
-  /** AudioContext time corresponding to tick 0 of the current loop pass */
   private loopStartTime = 0;
   private nextEventIndex = 0;
   private sortedEvents: Array<NoteEvent & { trackInstrument: Instrument }> = [];
-  /** Every source scheduled for the current song, so stop() can silence all. */
   private activeSources = new Set<AudioScheduledSourceNode>();
   private createAudioContext: AudioContextFactory;
 
@@ -46,7 +48,6 @@ export class Player {
       .flatMap((track) => track.events.map((e) => ({ ...e, trackInstrument: track.instrument })))
       .sort((a, b) => a.tick - b.tick);
 
-    // Restore master gain (stop() ramps it to 0 to de-click).
     if (this.master) {
       this.master.gain.cancelScheduledValues(ctx.currentTime);
       this.master.gain.setValueAtTime(Player.MASTER_GAIN, ctx.currentTime);
@@ -67,10 +68,6 @@ export class Player {
 
     const ctx = this.ctx;
     const now = ctx ? ctx.currentTime : 0;
-
-    // Short de-click fade on the master, then hard-stop every source on the
-    // audio clock. No wall-clock setTimeout: teardown is immediate and cannot
-    // be delayed by tab throttling or CPU load.
     if (this.master && ctx) {
       this.master.gain.cancelScheduledValues(now);
       this.master.gain.setValueAtTime(this.master.gain.value, now);
@@ -81,7 +78,7 @@ export class Player {
       try {
         src.stop(cut);
       } catch {
-        // Source already stopped/ended — nothing to do.
+        // Already stopped/ended.
       }
     }
     this.activeSources.clear();
@@ -118,7 +115,6 @@ export class Player {
 
     while (true) {
       if (this.nextEventIndex >= this.sortedEvents.length) {
-        // Wrap to the next loop pass
         this.loopStartTime += song.lengthTicks * spt;
         this.nextEventIndex = 0;
       }
@@ -126,22 +122,38 @@ export class Player {
       const startTime = this.loopStartTime + event.tick * spt;
       if (startTime > horizon) break;
       this.nextEventIndex++;
-      if (startTime < ctx.currentTime - 0.02) continue; // too late, skip
-      this.scheduleNote(event, event.trackInstrument, startTime, event.durationTicks * spt);
+      if (startTime < ctx.currentTime - 0.02) continue;
+      this.scheduleEvent(event, event.trackInstrument, startTime, event.durationTicks * spt);
     }
   }
 
-  private scheduleNote(event: NoteEvent, trackInstrument: Instrument, time: number, duration: number): void {
+  private scheduleEvent(event: NoteEvent, trackInstrument: Instrument, time: number, duration: number): void {
+    const instrument = event.instrument ?? trackInstrument;
+    if (event.arpNotes && event.arpNotes.length > 0 && instrument.arpRateHz) {
+      this.scheduleArp(instrument, event.arpNotes, event.velocity, time, duration);
+    } else {
+      this.scheduleTone(instrument, event.midiNote, event.velocity, time, duration, event.glideFromMidi);
+    }
+  }
+
+  /** A single note: pulse/triangle/saw or noise, with optional vibrato and glide. */
+  private scheduleTone(
+    instrument: Instrument,
+    midiNote: number,
+    velocity: number,
+    time: number,
+    duration: number,
+    glideFrom?: number,
+  ): void {
     const ctx = this.ctx;
     const filter = this.filter;
     if (!ctx || !filter) return;
-    const instrument = event.instrument ?? trackInstrument;
 
     const envelope = ctx.createGain();
     envelope.connect(filter);
-    this.applyAdsr(envelope, instrument, event.velocity, time, duration);
-
+    this.applyAdsr(envelope, instrument, velocity, time, duration);
     const stopTime = time + duration + instrument.adsr.r + 0.05;
+
     let source: AudioScheduledSourceNode;
     if (instrument.waveform === 'noise') {
       const src = ctx.createBufferSource();
@@ -151,18 +163,85 @@ export class Player {
       source = src;
     } else {
       const osc = ctx.createOscillator();
-      osc.type = instrument.waveform === 'pulse' ? 'square' : instrument.waveform;
-      const freq = midiToFreq(event.midiNote);
-      osc.frequency.setValueAtTime(freq, time);
-      // Chip-style kick: short envelope at low pitch gets a downward sweep
-      if (instrument.adsr.s === 0 && event.midiNote < 45) {
+      this.setWaveform(osc, instrument);
+      const freq = midiToFreq(midiNote);
+      if (instrument.adsr.s === 0 && midiNote < 45) {
+        // Chip-style kick: short envelope at low pitch gets a downward sweep.
         osc.frequency.setValueAtTime(freq * 3, time);
         osc.frequency.exponentialRampToValueAtTime(freq, time + 0.06);
+      } else if (glideFrom != null) {
+        osc.frequency.setValueAtTime(midiToFreq(glideFrom), time);
+        osc.frequency.exponentialRampToValueAtTime(freq, time + Math.min(0.06, duration * 0.4));
+      } else {
+        osc.frequency.setValueAtTime(freq, time);
       }
+      if (instrument.vibrato) this.attachVibrato(osc, instrument, time, stopTime);
       osc.connect(envelope);
       source = osc;
     }
 
+    this.trackSource(source, envelope, time, stopTime);
+  }
+
+  /**
+   * Frame-rate arpeggio on one oscillator whose pitch steps through the chord
+   * — the signature C64 "chord on a single voice" shimmer.
+   */
+  private scheduleArp(
+    instrument: Instrument,
+    arpNotes: number[],
+    velocity: number,
+    time: number,
+    duration: number,
+  ): void {
+    const ctx = this.ctx;
+    const filter = this.filter;
+    if (!ctx || !filter) return;
+
+    const envelope = ctx.createGain();
+    envelope.connect(filter);
+    this.applyAdsr(envelope, instrument, velocity, time, duration);
+    const stopTime = time + duration + instrument.adsr.r + 0.03;
+
+    const osc = ctx.createOscillator();
+    this.setWaveform(osc, instrument);
+    const frame = 1 / (instrument.arpRateHz ?? 40);
+    const frames = Math.max(1, Math.ceil(duration / frame));
+    for (let k = 0; k < frames; k++) {
+      osc.frequency.setValueAtTime(midiToFreq(arpNotes[k % arpNotes.length]), time + k * frame);
+    }
+    osc.connect(envelope);
+    this.trackSource(osc, envelope, time, stopTime);
+  }
+
+  private setWaveform(osc: OscillatorNode, instrument: Instrument): void {
+    if (instrument.waveform === 'pulse') {
+      osc.setPeriodicWave(this.getPulseWave(instrument.pulseWidth ?? 0.5));
+    } else {
+      osc.type = instrument.waveform === 'noise' ? 'square' : instrument.waveform;
+    }
+  }
+
+  private attachVibrato(osc: OscillatorNode, instrument: Instrument, time: number, stopTime: number): void {
+    const ctx = this.ctx;
+    const vib = instrument.vibrato;
+    if (!ctx || !vib) return;
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = vib.rateHz;
+    const depth = ctx.createGain();
+    depth.gain.setValueAtTime(0, time);
+    depth.gain.setValueAtTime(0, time + vib.delaySec);
+    depth.gain.linearRampToValueAtTime(vib.depthCents, time + vib.delaySec + 0.08);
+    lfo.connect(depth);
+    depth.connect(osc.detune);
+    lfo.start(time);
+    lfo.stop(stopTime);
+    this.activeSources.add(lfo);
+    lfo.addEventListener('ended', () => this.activeSources.delete(lfo));
+  }
+
+  private trackSource(source: AudioScheduledSourceNode, envelope: GainNode, time: number, stopTime: number): void {
     this.activeSources.add(source);
     source.addEventListener('ended', () => {
       this.activeSources.delete(source);
@@ -182,6 +261,25 @@ export class Player {
     const releaseStart = Math.max(time + a + d, time + duration);
     g.setValueAtTime(peak * s, releaseStart);
     g.linearRampToValueAtTime(0, releaseStart + r);
+  }
+
+  /** Band-limited pulse wave for a given duty cycle, cached per duty. */
+  private getPulseWave(duty: number): PeriodicWave {
+    const ctx = this.ctx!;
+    const key = Math.max(1, Math.min(99, Math.round(duty * 100)));
+    let wave = this.pulseWaves.get(key);
+    if (!wave) {
+      const harmonics = 32;
+      const real = new Float32Array(harmonics + 1);
+      const imag = new Float32Array(harmonics + 1);
+      const d = key / 100;
+      for (let n = 1; n <= harmonics; n++) {
+        real[n] = (2 / (n * Math.PI)) * Math.sin(n * Math.PI * d);
+      }
+      wave = ctx.createPeriodicWave(real, imag, { disableNormalization: false });
+      this.pulseWaves.set(key, wave);
+    }
+    return wave;
   }
 
   private createNoiseBuffer(ctx: AudioContext): AudioBuffer {

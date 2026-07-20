@@ -24,10 +24,22 @@ picks within those rules, so every tune is random yet musical.
 
 Like the real SID chip, only three voices play at once:
 
-1. **Lead** — pulse-wave melody
-2. **Arpeggio** — chords as fast broken notes (the iconic C64 shimmer)
-3. **Bass + drums shared** — bass roots between kick/snare hits, the way
-   real SID composers multiplexed one channel
+1. **Lead** — a pulse-wave melody built from a motif that develops across the
+   phrase (inversion, cadence), walked on a pentatonic ladder so it stays
+   hummable. Delayed vibrato and portamento slides give it life.
+2. **Arpeggio** — the chord rendered on a single oscillator whose pitch steps
+   through the notes at frame rate: the iconic C64 shimmer.
+3. **Bass + drums shared** — a driving bassline (root-8, octave-16 or a
+   Hubbard-style running line) with a kick/snare backbeat and off-beat hats,
+   all multiplexed onto one channel the way real SID composers did.
+
+### The classic-game character
+
+- **Modes**, not just major/minor: harmonic minor (dark/exotic), Dorian
+  (chill groove), plus major — the palette behind Last Ninja-era tunes.
+- **Pulse-width timbre**: narrow duty cycles (12.5%–25%) for the nasal,
+  hollow C64 lead, via band-limited `PeriodicWave`s.
+- Every tune derives from a **seed**, so it is fully reproducible.
 
 ## Development
 

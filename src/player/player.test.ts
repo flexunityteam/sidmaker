@@ -21,12 +21,14 @@ class FakeSource {
   started = false;
   stopCalled = false;
   frequency = fakeParam();
+  detune = fakeParam();
   buffer: unknown = null;
   loop = false;
   type = '';
   private listeners: Record<string, Array<() => void>> = {};
   connect() {}
   disconnect() {}
+  setPeriodicWave() {}
   start() {
     this.started = true;
   }
@@ -64,6 +66,9 @@ class FakeCtx {
   }
   createBuffer() {
     return { getChannelData: () => new Float32Array(this.sampleRate) };
+  }
+  createPeriodicWave() {
+    return {} as PeriodicWave;
   }
 }
 

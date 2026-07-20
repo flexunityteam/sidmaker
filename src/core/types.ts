@@ -17,6 +17,14 @@ export interface Adsr {
   r: number;
 }
 
+/** Gentle pitch wobble on sustained notes, the expressive core of SID leads. */
+export interface Vibrato {
+  rateHz: number;
+  depthCents: number;
+  /** Seconds before the vibrato fades in, like a real player's delayed vibrato */
+  delaySec: number;
+}
+
 export interface Instrument {
   waveform: Waveform;
   /** Pulse duty cycle 0..1, only meaningful for 'pulse' */
@@ -24,6 +32,13 @@ export interface Instrument {
   adsr: Adsr;
   /** Linear gain 0..1 applied to this instrument's notes */
   gain: number;
+  vibrato?: Vibrato;
+  /**
+   * Frame-rate arpeggio speed in notes per second. When set and a note
+   * carries arpNotes, the player renders that note as one oscillator whose
+   * pitch steps through the chord — the signature C64 chord shimmer.
+   */
+  arpRateHz?: number;
 }
 
 export interface NoteEvent {
@@ -39,6 +54,16 @@ export interface NoteEvent {
    * voice where kick, snare and bass alternate within one track.
    */
   instrument?: Instrument;
+  /**
+   * When set, the player pitch-slides (portamento) from this MIDI note into
+   * midiNote at the start of the note.
+   */
+  glideFromMidi?: number;
+  /**
+   * When set, the player renders this note as a frame-rate arpeggio cycling
+   * through these MIDI notes (the C64 "chord on one voice" trick).
+   */
+  arpNotes?: number[];
 }
 
 export interface Track {
