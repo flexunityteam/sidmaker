@@ -1,8 +1,15 @@
 import type { Instrument, NoteEvent, Song } from '../core/types';
 
+export type AudioContextFactory = () => AudioContext;
+
 /**
  * Web Audio playback engine. Knows nothing about music theory — it just
  * schedules NoteEvents with a standard lookahead loop and loops the song.
+ *
+ * Teardown is deterministic: every scheduled source node is tracked and
+ * stopped on the audio clock in stop(), with no reliance on wall-clock
+ * timers. The master/filter graph is created once and reused, so stopping
+ * and re-generating can never leave a previous song audible.
  */
 export class Player {
   private ctx: AudioContext | null = null;
@@ -16,6 +23,15 @@ export class Player {
   private loopStartTime = 0;
   private nextEventIndex = 0;
   private sortedEvents: Array<NoteEvent & { trackInstrument: Instrument }> = [];
+  /** Every source scheduled for the current song, so stop() can silence all. */
+  private activeSources = new Set<AudioScheduledSourceNode>();
+  private createAudioContext: AudioContextFactory;
+
+  constructor(createAudioContext: AudioContextFactory = () => new AudioContext()) {
+    this.createAudioContext = createAudioContext;
+  }
+
+  private static readonly MASTER_GAIN = 0.9;
 
   get isPlaying(): boolean {
     return this.timer !== null;
@@ -30,9 +46,15 @@ export class Player {
       .flatMap((track) => track.events.map((e) => ({ ...e, trackInstrument: track.instrument })))
       .sort((a, b) => a.tick - b.tick);
 
+    // Restore master gain (stop() ramps it to 0 to de-click).
+    if (this.master) {
+      this.master.gain.cancelScheduledValues(ctx.currentTime);
+      this.master.gain.setValueAtTime(Player.MASTER_GAIN, ctx.currentTime);
+    }
+
     this.loopStartTime = ctx.currentTime + 0.1;
     this.nextEventIndex = 0;
-    this.timer = window.setInterval(() => this.scheduleAhead(), 25);
+    this.timer = setInterval(() => this.scheduleAhead(), 25) as unknown as number;
     this.scheduleAhead();
   }
 
@@ -42,35 +64,43 @@ export class Player {
       this.timer = null;
     }
     this.song = null;
-    // Let already-scheduled notes ring out briefly, then cut everything
-    if (this.ctx && this.master) {
-      const m = this.master;
-      m.gain.cancelScheduledValues(this.ctx.currentTime);
-      m.gain.setValueAtTime(m.gain.value, this.ctx.currentTime);
-      m.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.05);
-      const oldMaster = m;
-      window.setTimeout(() => oldMaster.disconnect(), 100);
-      this.master = null;
-      this.filter = null;
+
+    const ctx = this.ctx;
+    const now = ctx ? ctx.currentTime : 0;
+
+    // Short de-click fade on the master, then hard-stop every source on the
+    // audio clock. No wall-clock setTimeout: teardown is immediate and cannot
+    // be delayed by tab throttling or CPU load.
+    if (this.master && ctx) {
+      this.master.gain.cancelScheduledValues(now);
+      this.master.gain.setValueAtTime(this.master.gain.value, now);
+      this.master.gain.linearRampToValueAtTime(0, now + 0.02);
     }
+    const cut = now + 0.03;
+    for (const src of this.activeSources) {
+      try {
+        src.stop(cut);
+      } catch {
+        // Source already stopped/ended — nothing to do.
+      }
+    }
+    this.activeSources.clear();
   }
 
   private ensureContext(): AudioContext {
     if (!this.ctx) {
-      this.ctx = new AudioContext();
+      this.ctx = this.createAudioContext();
       this.noiseBuffer = this.createNoiseBuffer(this.ctx);
-    }
-    if (this.ctx.state === 'suspended') {
-      void this.ctx.resume();
-    }
-    if (!this.master) {
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.9;
+      this.master.gain.value = Player.MASTER_GAIN;
       this.filter = this.ctx.createBiquadFilter();
       this.filter.type = 'lowpass';
       this.filter.frequency.value = 9000;
       this.filter.connect(this.master);
       this.master.connect(this.ctx.destination);
+    }
+    if (this.ctx.state === 'suspended') {
+      void this.ctx.resume();
     }
     return this.ctx;
   }
@@ -112,13 +142,13 @@ export class Player {
     this.applyAdsr(envelope, instrument, event.velocity, time, duration);
 
     const stopTime = time + duration + instrument.adsr.r + 0.05;
+    let source: AudioScheduledSourceNode;
     if (instrument.waveform === 'noise') {
       const src = ctx.createBufferSource();
       src.buffer = this.noiseBuffer;
       src.loop = true;
       src.connect(envelope);
-      src.start(time);
-      src.stop(stopTime);
+      source = src;
     } else {
       const osc = ctx.createOscillator();
       osc.type = instrument.waveform === 'pulse' ? 'square' : instrument.waveform;
@@ -130,9 +160,16 @@ export class Player {
         osc.frequency.exponentialRampToValueAtTime(freq, time + 0.06);
       }
       osc.connect(envelope);
-      osc.start(time);
-      osc.stop(stopTime);
+      source = osc;
     }
+
+    this.activeSources.add(source);
+    source.addEventListener('ended', () => {
+      this.activeSources.delete(source);
+      envelope.disconnect();
+    });
+    source.start(time);
+    source.stop(stopTime);
   }
 
   private applyAdsr(envelope: GainNode, instrument: Instrument, velocity: number, time: number, duration: number): void {
