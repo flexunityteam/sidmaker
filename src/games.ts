@@ -16,6 +16,7 @@ interface BundledGame {
 
 // Only games we are legally allowed to redistribute are listed here.
 const BUNDLED_GAMES: BundledGame[] = [
+  { name: 'Spy Chase', file: 'spychase.prg', by: 'SIDMAKER (public domain)' },
   { name: 'Guess (BASIC)', file: 'guess.prg', by: 'SIDMAKER (public domain)' },
 ];
 
