@@ -2,9 +2,11 @@
 :root {
   --c64-border: #6c5eb5;
   --c64-screen: #40318d;
+  --c64-screen-dark: #362a78;
   --c64-text: #a29ddb;
   --c64-bright: #e0dcff;
   --c64-accent: #9ae29b;
+  --glow: 0 0 5px rgba(162, 157, 219, 0.55);
 }
 
 * {
@@ -14,23 +16,51 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--c64-border);
+  background: radial-gradient(circle at 50% 40%, #2a2350 0%, #16122e 100%);
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 1.5rem;
   font-family: 'Courier New', Courier, monospace;
   font-weight: bold;
   text-transform: uppercase;
 }
 
+/* The CRT glass: rounded bezel, phosphor glow, scanlines. */
 .screen {
+  position: relative;
+  overflow: hidden;
   background: var(--c64-screen);
   color: var(--c64-text);
-  width: min(680px, 92vw);
+  width: min(680px, 94vw);
   padding: 2.5rem 2rem;
   letter-spacing: 0.08em;
   line-height: 1.7;
-  box-shadow: 0 0 0 4px var(--c64-screen);
+  border-radius: 14px;
+  text-shadow: var(--glow);
+  box-shadow:
+    0 0 0 12px #4a3f7a,
+    0 0 0 15px #2c2550,
+    0 22px 60px rgba(0, 0, 0, 0.6),
+    inset 0 0 90px rgba(0, 0, 0, 0.45),
+    inset 0 0 20px rgba(120, 110, 200, 0.25);
+}
+
+/* Scanline overlay — sits above content but never blocks clicks. */
+.crt {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.14) 0px,
+      rgba(0, 0, 0, 0.14) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  border-radius: 14px;
 }
 
 .screen h1 {
@@ -38,12 +68,14 @@ body {
   font-size: 1.3rem;
   margin: 0 0 0.2rem;
   text-align: center;
+  text-shadow: 0 0 8px rgba(224, 220, 255, 0.6);
 }
 
 .screen .subtitle {
   text-align: center;
   font-size: 0.75rem;
   margin: 0 0 1.5rem;
+  opacity: 0.85;
 }
 
 .control-group {
@@ -61,25 +93,34 @@ body {
   flex-wrap: wrap;
 }
 
-button {
+button,
+input {
   font: inherit;
   letter-spacing: inherit;
   text-transform: inherit;
-  background: var(--c64-screen);
+}
+
+button {
+  background: var(--c64-screen-dark);
   color: var(--c64-text);
   border: 2px solid var(--c64-text);
+  border-radius: 4px;
   padding: 0.4rem 0.9rem;
   cursor: pointer;
+  text-shadow: var(--glow);
+  transition: background 0.08s, color 0.08s, box-shadow 0.08s;
 }
 
 button:hover {
   color: var(--c64-bright);
   border-color: var(--c64-bright);
+  box-shadow: 0 0 10px rgba(224, 220, 255, 0.35);
 }
 
 button.selected {
   background: var(--c64-text);
   color: var(--c64-screen);
+  text-shadow: none;
 }
 
 .transport {
@@ -102,22 +143,60 @@ button.selected {
 #generate:hover {
   background: var(--c64-accent);
   color: var(--c64-screen);
+  box-shadow: 0 0 14px rgba(154, 226, 155, 0.5);
 }
 
 .actions {
   display: flex;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
 }
 
 .actions button {
   flex: 1;
   padding: 0.55rem 0;
+  font-size: 0.85rem;
+}
+
+.load-row {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.load-row input {
+  flex: 1;
+  min-width: 0;
+  background: var(--c64-screen-dark);
+  color: var(--c64-bright);
+  border: 2px solid var(--c64-text);
+  border-radius: 4px;
+  padding: 0.5rem 0.7rem;
+  text-transform: none;
+  text-shadow: var(--glow);
+}
+
+.load-row input::placeholder {
+  color: var(--c64-text);
+  opacity: 0.6;
+  text-transform: uppercase;
+  font-size: 0.85em;
+}
+
+.load-row input:focus {
+  outline: none;
+  border-color: var(--c64-bright);
+  box-shadow: 0 0 10px rgba(224, 220, 255, 0.35);
+}
+
+.load-row button {
+  padding: 0.5rem 1.1rem;
 }
 
 button:disabled {
   opacity: 0.4;
   cursor: default;
+  box-shadow: none;
 }
 
 .status {
@@ -132,6 +211,7 @@ button:disabled {
   height: 1em;
   background: var(--c64-text);
   vertical-align: text-bottom;
+  box-shadow: var(--glow);
   animation: blink 1s steps(1) infinite;
 }
 

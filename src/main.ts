@@ -4,8 +4,9 @@ import type { GenerateOptions } from './generator/generate';
 import type { LengthChoice, MoodName, TempoChoice } from './generator/moods';
 import { Player } from './player/player';
 import type { Song } from './core/types';
-import { renderSongToWav } from './export/wav';
-import { encodeShare, parseShare } from './share';
+import { encodeWav, renderSong } from './export/wav';
+import { encodeMp3 } from './export/mp3';
+import { encodeShare, parseShare, parseTuneInput } from './share';
 
 const MOOD_LABELS: Record<MoodName, string> = {
   hero: 'Hero',
@@ -26,6 +27,7 @@ const player = new Player();
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `
   <div class="screen">
+    <div class="crt"></div>
     <h1>**** SIDMAKER ****</h1>
     <p class="subtitle">64K RAM SYSTEM &nbsp; 3 VOICES FREE</p>
 
@@ -61,8 +63,14 @@ app.innerHTML = `
     </div>
 
     <div class="actions">
-      <button id="export">Save WAV</button>
+      <button id="export-wav">Save WAV</button>
+      <button id="export-mp3">Save MP3</button>
       <button id="copylink">Copy Link</button>
+    </div>
+
+    <div class="load-row">
+      <input id="seedinput" type="text" placeholder="Paste a seed or link" spellcheck="false" autocomplete="off" />
+      <button id="loadbtn">Load</button>
     </div>
 
     <div class="status" id="status">Ready.<span class="cursor"></span></div>
@@ -95,12 +103,14 @@ setupOptionGroup('length');
 
 const statusEl = document.getElementById('status')!;
 const playStopBtn = document.getElementById('playstop') as HTMLButtonElement;
-const exportBtn = document.getElementById('export') as HTMLButtonElement;
+const exportWavBtn = document.getElementById('export-wav') as HTMLButtonElement;
+const exportMp3Btn = document.getElementById('export-mp3') as HTMLButtonElement;
 const copyBtn = document.getElementById('copylink') as HTMLButtonElement;
+const seedInput = document.getElementById('seedinput') as HTMLInputElement;
+const loadBtn = document.getElementById('loadbtn') as HTMLButtonElement;
 
 function setStatus(text: string): void {
-  // textContent (not innerHTML) so status text — including error messages and
-  // share links — can never inject markup.
+  // textContent (not innerHTML) so status text can never inject markup.
   statusEl.textContent = text;
   const cursor = document.createElement('span');
   cursor.className = 'cursor';
@@ -116,6 +126,18 @@ function playSong(song: Song, prefix: string): void {
   player.play(song);
   playStopBtn.textContent = 'Stop';
   setStatus(`${prefix}\n${describe(song)}`);
+}
+
+function download(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Defer revoke so the browser can finish reading the blob for the download.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 document.getElementById('generate')!.addEventListener('click', () => {
@@ -136,34 +158,32 @@ playStopBtn.addEventListener('click', () => {
   }
 });
 
-exportBtn.addEventListener('click', async () => {
+async function saveAs(format: 'wav' | 'mp3'): Promise<void> {
   if (!state.song) {
     setStatus('Generate a tune first, then save it.');
     return;
   }
   const song = state.song;
-  exportBtn.disabled = true;
-  setStatus('Rendering WAV...');
+  exportWavBtn.disabled = true;
+  exportMp3Btn.disabled = true;
+  setStatus(`Rendering ${format.toUpperCase()}...`);
   try {
     // Offline render on its own context; live playback keeps going untouched.
-    const blob = await renderSongToWav(song, 2);
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `sidmaker-${state.mood}-${song.seed}.wav`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    // Defer revoke so the browser can finish reading the blob for the download.
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    const kb = Math.round(blob.size / 1024);
-    setStatus(`Saved sidmaker-${state.mood}-${song.seed}.wav (${kb} KB, 2 loops).`);
+    const buffer = await renderSong(song, 2);
+    const blob = format === 'mp3' ? encodeMp3(buffer) : encodeWav(buffer);
+    const filename = `sidmaker-${state.mood}-${song.seed}.${format}`;
+    download(blob, filename);
+    setStatus(`Saved ${filename} (${Math.round(blob.size / 1024)} KB).`);
   } catch (err) {
     setStatus(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
-    exportBtn.disabled = false;
+    exportWavBtn.disabled = false;
+    exportMp3Btn.disabled = false;
   }
-});
+}
+
+exportWavBtn.addEventListener('click', () => void saveAs('wav'));
+exportMp3Btn.addEventListener('click', () => void saveAs('mp3'));
 
 copyBtn.addEventListener('click', async () => {
   if (!state.song) {
@@ -181,17 +201,28 @@ copyBtn.addEventListener('click', async () => {
   }
 });
 
-// Load a shared tune from the URL hash (set up but not auto-played — browsers
-// block audio until the first click).
-function loadFromHash(): void {
-  const tune = parseShare(location.hash);
-  if (!tune) return;
+function loadTune(tune: { mood: MoodName; tempo: TempoChoice; length: LengthChoice; seed: number }, prefix: string): void {
   selectors.mood(tune.mood);
   selectors.tempo(tune.tempo);
   selectors.length(tune.length);
   state.song = generateSong(tune.seed, { mood: tune.mood, tempo: tune.tempo, length: tune.length });
   playStopBtn.textContent = 'Play';
-  setStatus(`Loaded a shared tune - press play.\n${describe(state.song)}`);
+  setStatus(`${prefix}\n${describe(state.song)}`);
 }
 
-loadFromHash();
+loadBtn.addEventListener('click', () => {
+  const tune = parseTuneInput(seedInput.value, { mood: state.mood, tempo: state.tempo, length: state.length });
+  if (!tune) {
+    setStatus('That is not a valid seed or link.');
+    return;
+  }
+  loadTune(tune, 'Loaded - press play:');
+});
+seedInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') loadBtn.click();
+});
+
+// Load a shared tune from the URL hash (set up but not auto-played — browsers
+// block audio until the first click).
+const fromHash = parseShare(location.hash);
+if (fromHash) loadTune(fromHash, 'Loaded a shared tune - press play:');

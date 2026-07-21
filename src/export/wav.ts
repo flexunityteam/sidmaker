@@ -53,11 +53,12 @@ export function encodeWav(buffer: PcmSource): Blob {
 }
 
 /**
- * Render a Song to a WAV blob by scheduling every event once per loop into an
+ * Render a Song to raw audio by scheduling every event once per loop into an
  * OfflineAudioContext and rendering faster than realtime. Uses the same synth
- * as live playback, so the file sounds identical to what you hear.
+ * as live playback, so the output sounds identical to what you hear. The
+ * resulting AudioBuffer feeds both the WAV and MP3 encoders.
  */
-export async function renderSongToWav(song: Song, loops = 2, sampleRate = 44100): Promise<Blob> {
+export async function renderSong(song: Song, loops = 2, sampleRate = 44100): Promise<AudioBuffer> {
   const secondsPerTick = 60 / song.bpm / song.ticksPerBeat;
   const loopSec = song.lengthTicks * secondsPerTick;
   const lead = 0.02; // tiny head start so nothing clicks at t=0
@@ -95,6 +96,10 @@ export async function renderSongToWav(song: Song, loops = 2, sampleRate = 44100)
     }
   }
 
-  const rendered = await ctx.startRendering();
-  return encodeWav(rendered);
+  return ctx.startRendering();
+}
+
+/** Render a Song straight to a WAV blob. */
+export async function renderSongToWav(song: Song, loops = 2, sampleRate = 44100): Promise<Blob> {
+  return encodeWav(await renderSong(song, loops, sampleRate));
 }
