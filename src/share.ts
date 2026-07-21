@@ -23,6 +23,6 @@ export function parseShare(code: string): TuneState | null {
   if (!TEMPOS.includes(tempo as TempoChoice)) return null;
   if (!LENGTHS.includes(length as LengthChoice)) return null;
   const seed = parseInt(seed36, 36);
-  if (!Number.isInteger(seed) || seed < 0) return null;
+  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) return null;
   return { mood: mood as MoodName, tempo: tempo as TempoChoice, length: length as LengthChoice, seed };
 }

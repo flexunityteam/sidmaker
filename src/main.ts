@@ -143,9 +143,9 @@ exportBtn.addEventListener('click', async () => {
   }
   const song = state.song;
   exportBtn.disabled = true;
-  const wasPlaying = player.isPlaying;
   setStatus('Rendering WAV...');
   try {
+    // Offline render on its own context; live playback keeps going untouched.
     const blob = await renderSongToWav(song, 2);
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -154,14 +154,14 @@ exportBtn.addEventListener('click', async () => {
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(url);
+    // Defer revoke so the browser can finish reading the blob for the download.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
     const kb = Math.round(blob.size / 1024);
     setStatus(`Saved sidmaker-${state.mood}-${song.seed}.wav (${kb} KB, 2 loops).`);
   } catch (err) {
     setStatus(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
     exportBtn.disabled = false;
-    if (wasPlaying && !player.isPlaying) playSong(song, 'Now playing:');
   }
 });
 

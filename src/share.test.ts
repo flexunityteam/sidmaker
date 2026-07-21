@@ -21,5 +21,6 @@ describe('share codes', () => {
     expect(parseShare('hero.turbo.short.1')).toBeNull(); // bad tempo
     expect(parseShare('hero.mid.medium.1')).toBeNull(); // bad length
     expect(parseShare('hero.mid.short.')).toBeNull(); // empty seed
+    expect(parseShare('hero.mid.short.zzzzzzzz')).toBeNull(); // seed > 2^32
   });
 });
