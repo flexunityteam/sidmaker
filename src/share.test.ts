@@ -51,9 +51,20 @@ describe('parseTuneInput', () => {
     expect(parseTuneInput('  12345 ', fallback)).toEqual({ ...fallback, seed: 12345 });
   });
 
-  it('rejects junk', () => {
+  it('returns null only for empty input', () => {
     expect(parseTuneInput('', fallback)).toBeNull();
-    expect(parseTuneInput('not a seed', fallback)).toBeNull();
-    expect(parseTuneInput('99999999999', fallback)).toBeNull(); // > 2^32
+    expect(parseTuneInput('   ', fallback)).toBeNull();
+  });
+
+  it('hashes an arbitrary URL or text into a deterministic tune', () => {
+    const url = 'https://www.youtube.com/watch?v=djV11Xbc914';
+    const a = parseTuneInput(url, fallback);
+    expect(a).not.toBeNull();
+    expect(a).toEqual(parseTuneInput(url, fallback)); // same input -> same tune
+    expect(a!.mood).toBe(fallback.mood); // uses the current options
+    expect(a!.seed).toBeGreaterThanOrEqual(0);
+    expect(a!.seed).toBeLessThanOrEqual(0xffffffff);
+    const other = parseTuneInput('https://youtu.be/something-else', fallback);
+    expect(other!.seed).not.toBe(a!.seed); // different input -> different seed
   });
 });

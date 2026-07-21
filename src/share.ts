@@ -27,25 +27,38 @@ export function parseShare(code: string): TuneState | null {
   return { mood: mood as MoodName, tempo: tempo as TempoChoice, length: length as LengthChoice, seed };
 }
 
+/** Deterministic 32-bit FNV-1a hash of a string, for turning any text/URL into a seed. */
+export function hashString(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
 /**
- * Parse whatever a user pastes into the load box: a full share link, a bare
- * share code, or a plain decimal seed. A bare seed reuses the current
- * mood/tempo/length (the `fallback`), matching the seed shown while playing.
+ * Parse whatever a user pastes into the load box:
+ *   1. a full share link or bare share code  -> that exact tune,
+ *   2. a plain decimal seed                   -> that seed with current options,
+ *   3. anything else (a URL, a song title, …) -> hashed into a seed with current
+ *      options, so pasting e.g. a YouTube link always gives the same chiptune.
+ * Only empty input returns null.
  */
 export function parseTuneInput(raw: string, fallback: GenerateOptions): TuneState | null {
-  let s = raw.trim();
-  if (!s) return null;
-  const hashIndex = s.lastIndexOf('#');
-  if (hashIndex >= 0) s = s.slice(hashIndex + 1);
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
 
-  const share = parseShare(s);
+  const hashIndex = trimmed.lastIndexOf('#');
+  const share = parseShare(hashIndex >= 0 ? trimmed.slice(hashIndex + 1) : trimmed);
   if (share) return share;
 
-  if (/^\d+$/.test(s)) {
-    const seed = Number(s);
+  if (/^\d+$/.test(trimmed)) {
+    const seed = Number(trimmed);
     if (Number.isInteger(seed) && seed >= 0 && seed <= 0xffffffff) {
       return { mood: fallback.mood, tempo: fallback.tempo, length: fallback.length, seed };
     }
   }
-  return null;
+
+  return { mood: fallback.mood, tempo: fallback.tempo, length: fallback.length, seed: hashString(trimmed) };
 }

@@ -72,7 +72,7 @@ app.innerHTML = `
     </div>
 
     <div class="load-row">
-      <input id="seedinput" type="text" placeholder="Paste a seed or link" spellcheck="false" autocomplete="off" />
+      <input id="seedinput" type="text" placeholder="Paste a seed, link, or any URL" spellcheck="false" autocomplete="off" />
       <button id="loadbtn">Load</button>
     </div>
 
@@ -243,7 +243,11 @@ copyBtn.addEventListener('click', async () => {
   }
 });
 
-function loadTune(tune: { mood: MoodName; tempo: TempoChoice; length: LengthChoice; seed: number }, prefix: string): void {
+function loadTune(
+  tune: { mood: MoodName; tempo: TempoChoice; length: LengthChoice; seed: number },
+  prefix: string,
+  autoplay: boolean,
+): void {
   selectors.mood(tune.mood);
   selectors.tempo(tune.tempo);
   selectors.length(tune.length);
@@ -251,17 +255,21 @@ function loadTune(tune: { mood: MoodName; tempo: TempoChoice; length: LengthChoi
   history.push({ mood: tune.mood, tempo: tune.tempo, length: tune.length, seed: tune.seed });
   historyIndex = history.length - 1;
   updateHistoryButtons();
-  playStopBtn.textContent = 'Play';
-  setStatus(`${prefix}\n${describe(state.song)}`);
+  if (autoplay) {
+    playSong(state.song, prefix);
+  } else {
+    playStopBtn.textContent = 'Play';
+    setStatus(`${prefix}\n${describe(state.song)}`);
+  }
 }
 
 loadBtn.addEventListener('click', () => {
   const tune = parseTuneInput(seedInput.value, { mood: state.mood, tempo: state.tempo, length: state.length });
   if (!tune) {
-    setStatus('That is not a valid seed or link.');
+    setStatus('Type or paste something first - a seed, a link, or any URL.');
     return;
   }
-  loadTune(tune, 'Loaded - press play:');
+  loadTune(tune, 'Now playing:', true);
 });
 seedInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') loadBtn.click();
@@ -270,7 +278,7 @@ seedInput.addEventListener('keydown', (e) => {
 // Load a shared tune from the URL hash (set up but not auto-played — browsers
 // block audio until the first click).
 const fromHash = parseShare(location.hash);
-if (fromHash) loadTune(fromHash, 'Loaded a shared tune - press play:');
+if (fromHash) loadTune(fromHash, 'Loaded a shared tune - press play:', false);
 updateHistoryButtons();
 
 // Shared visit counter (a Cloudflare Pages Function backed by KV). Counts each
