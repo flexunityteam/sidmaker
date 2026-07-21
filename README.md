@@ -15,10 +15,23 @@ picks within those rules, so every tune is random yet musical.
 - **Generator** (`src/generator/`) knows music theory, nothing about audio.
   `generateSong(seed, options)` is a pure, deterministic function: the same
   seed and options always produce the identical `Song`.
-- **Player** (`src/player/`) knows Web Audio, nothing about music theory.
-  It schedules `NoteEvent`s with a standard lookahead loop and loops the song.
-- **`Song`** (`src/core/types.ts`) is the seam: a future bit-exact WASM SID
-  player (reSID) or a WAV exporter consumes the same data structure.
+- **Synth** (`src/player/synth.ts`) turns instruments and notes into Web Audio
+  voices. It works against any `BaseAudioContext`, so the exact same sound
+  plays live and renders offline.
+- **Player** (`src/player/player.ts`) drives the synth in realtime: a
+  lookahead scheduler, looping, and deterministic teardown.
+- **Exporter** (`src/export/wav.ts`) drives the same synth through an
+  `OfflineAudioContext` and encodes the result as a WAV file.
+- **`Song`** (`src/core/types.ts`) is the seam between them; a future
+  bit-exact WASM SID player (reSID) can consume the same data structure.
+
+## Saving and sharing
+
+- **Save WAV** renders the current tune (2 loops) to a `.wav` file you can
+  download and keep.
+- **Copy Link** copies a short URL like `…/#hero.mid.short.1a2b3c`. Opening it
+  regenerates the exact same tune — the share code is just the mood, tempo,
+  length and seed.
 
 ### The three voices
 
@@ -50,7 +63,7 @@ npx vitest run    # generator tests (determinism, scale membership, structure)
 npm run build     # production build
 ```
 
-## Roadmap (not in v1)
+## Roadmap
 
-- Show/share seed, WAV export (OfflineAudioContext), true WASM reSID
-  playback, more moods, live mixer.
+- MP3 export (needs an encoder library), true WASM reSID playback, more
+  moods, a live mixer, and a seed input box.

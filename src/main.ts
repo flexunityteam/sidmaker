@@ -4,6 +4,8 @@ import type { GenerateOptions } from './generator/generate';
 import type { LengthChoice, MoodName, TempoChoice } from './generator/moods';
 import { Player } from './player/player';
 import type { Song } from './core/types';
+import { renderSongToWav } from './export/wav';
+import { encodeShare, parseShare } from './share';
 
 const MOOD_LABELS: Record<MoodName, string> = {
   hero: 'Hero',
@@ -58,9 +60,20 @@ app.innerHTML = `
       <button id="playstop">Play</button>
     </div>
 
+    <div class="actions">
+      <button id="export">Save WAV</button>
+      <button id="copylink">Copy Link</button>
+    </div>
+
     <div class="status" id="status">Ready.<span class="cursor"></span></div>
   </div>
 `;
+
+const selectors: Record<'mood' | 'tempo' | 'length', (value: string) => void> = {
+  mood: () => {},
+  tempo: () => {},
+  length: () => {},
+};
 
 function setupOptionGroup(id: 'mood' | 'tempo' | 'length'): void {
   const group = document.getElementById(id)!;
@@ -72,6 +85,7 @@ function setupOptionGroup(id: 'mood' | 'tempo' | 'length'): void {
     if (id === 'length') state.length = value as LengthChoice;
   };
   buttons.forEach((b) => b.addEventListener('click', () => select(b.dataset.value!)));
+  selectors[id] = select;
   select(state[id]);
 }
 
@@ -81,6 +95,8 @@ setupOptionGroup('length');
 
 const statusEl = document.getElementById('status')!;
 const playStopBtn = document.getElementById('playstop') as HTMLButtonElement;
+const exportBtn = document.getElementById('export') as HTMLButtonElement;
+const copyBtn = document.getElementById('copylink') as HTMLButtonElement;
 
 function setStatus(text: string): void {
   statusEl.innerHTML = `${text}<span class="cursor"></span>`;
@@ -88,15 +104,19 @@ function setStatus(text: string): void {
 
 function describe(song: Song): string {
   const bars = song.lengthTicks / (song.ticksPerBeat * 4);
-  return `Now playing: ${MOOD_LABELS[state.mood]} / ${song.bpm} BPM / ${bars} bars\nSeed ${song.seed}`;
+  return `${MOOD_LABELS[state.mood]} / ${song.bpm} BPM / ${bars} bars\nSeed ${song.seed}`;
+}
+
+function playSong(song: Song, prefix: string): void {
+  player.play(song);
+  playStopBtn.textContent = 'Stop';
+  setStatus(`${prefix}\n${describe(song)}`);
 }
 
 document.getElementById('generate')!.addEventListener('click', () => {
   const seed = (Math.random() * 0xffffffff) >>> 0;
   state.song = generateSong(seed, { mood: state.mood, tempo: state.tempo, length: state.length });
-  player.play(state.song);
-  playStopBtn.textContent = 'Stop';
-  setStatus(describe(state.song));
+  playSong(state.song, 'Now playing:');
 });
 
 playStopBtn.addEventListener('click', () => {
@@ -105,10 +125,68 @@ playStopBtn.addEventListener('click', () => {
     playStopBtn.textContent = 'Play';
     setStatus('Stopped. Press generate for a new tune.');
   } else if (state.song) {
-    player.play(state.song);
-    playStopBtn.textContent = 'Stop';
-    setStatus(describe(state.song));
+    playSong(state.song, 'Now playing:');
   } else {
     setStatus('Nothing to play yet - press generate.');
   }
 });
+
+exportBtn.addEventListener('click', async () => {
+  if (!state.song) {
+    setStatus('Generate a tune first, then save it.');
+    return;
+  }
+  const song = state.song;
+  exportBtn.disabled = true;
+  const wasPlaying = player.isPlaying;
+  setStatus('Rendering WAV...');
+  try {
+    const blob = await renderSongToWav(song, 2);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `sidmaker-${state.mood}-${song.seed}.wav`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    const kb = Math.round(blob.size / 1024);
+    setStatus(`Saved sidmaker-${state.mood}-${song.seed}.wav (${kb} KB, 2 loops).`);
+  } catch (err) {
+    setStatus(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    exportBtn.disabled = false;
+    if (wasPlaying && !player.isPlaying) playSong(song, 'Now playing:');
+  }
+});
+
+copyBtn.addEventListener('click', async () => {
+  if (!state.song) {
+    setStatus('Generate a tune first, then copy its link.');
+    return;
+  }
+  const code = encodeShare({ mood: state.mood, tempo: state.tempo, length: state.length, seed: state.song.seed });
+  const link = `${location.origin}${location.pathname}#${code}`;
+  try {
+    await navigator.clipboard.writeText(link);
+    setStatus(`Link copied to clipboard:\n${link}`);
+  } catch {
+    location.hash = code;
+    setStatus(`Link is in the address bar:\n${link}`);
+  }
+});
+
+// Load a shared tune from the URL hash (set up but not auto-played — browsers
+// block audio until the first click).
+function loadFromHash(): void {
+  const tune = parseShare(location.hash);
+  if (!tune) return;
+  selectors.mood(tune.mood);
+  selectors.tempo(tune.tempo);
+  selectors.length(tune.length);
+  state.song = generateSong(tune.seed, { mood: tune.mood, tempo: tune.tempo, length: tune.length });
+  playStopBtn.textContent = 'Play';
+  setStatus(`Loaded a shared tune - press play.\n${describe(state.song)}`);
+}
+
+loadFromHash();

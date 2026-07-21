@@ -104,6 +104,22 @@ button.selected {
   color: var(--c64-screen);
 }
 
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.actions button {
+  flex: 1;
+  padding: 0.55rem 0;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .status {
   font-size: 0.75rem;
   min-height: 3em;
