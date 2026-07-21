@@ -66,6 +66,14 @@ const ARP_SHAPES: readonly ArpShape[] = [
   (t) => [t[2], t[1], t[0], t[1]], // down then up
 ];
 
+/** Swing options per mood (fraction of a sixteenth); one picked per song. */
+const SWING_BY_MOOD: Record<MoodName, readonly number[]> = {
+  hero: [0, 0, 0.08, 0.12],
+  dark: [0, 0.1, 0.15],
+  bubbly: [0, 0, 0], // stays straight and punchy
+  chill: [0.12, 0.16, 0.2],
+};
+
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 interface Variety {
@@ -117,6 +125,7 @@ export function generateSong(seed: number, options: GenerateOptions): Song {
   const bpm = rng.range(bpmMin, bpmMax);
   const tonicMidi = rng.range(48, 59);
   const progression = rng.pick(PROGRESSIONS[mood.scale]);
+  const swing = rng.pick(SWING_BY_MOOD[options.mood]);
 
   // Per-song variety: the layers a listener actually distinguishes.
   const variety: Variety = {
@@ -165,7 +174,7 @@ export function generateSong(seed: number, options: GenerateOptions): Song {
     { name: 'bass+drums', instrument: mood.bass, events: generateBassAndDrums(ctx, mood.drumDensity, mood.hatDensity) },
   ];
 
-  return { bpm, ticksPerBeat: TICKS_PER_BEAT, lengthTicks: totalBars * TICKS_PER_BAR, tracks, seed };
+  return { bpm, ticksPerBeat: TICKS_PER_BEAT, lengthTicks: totalBars * TICKS_PER_BAR, tracks, seed, swing };
 }
 
 // ---------------------------------------------------------------------------
@@ -328,13 +337,27 @@ function generateBassAndDrums(ctx: SongContext, drumDensity: number, hatDensity:
   const kicks = new Set(variety.drums.kick);
   const snares = new Set(variety.drums.snare);
   const strongKick = new Set([0, 8]);
+  const firstMainBar = isIntro.filter(Boolean).length;
 
   for (let bar = 0; bar < ctx.totalBars; bar++) {
     const chordDeg = chordByBar[bar];
     const drumsOn = !isIntro[bar];
+    // A snare fill on the last bar of each 4-bar phrase, leading into the next.
+    const fillBar = drumsOn && (bar - firstMainBar) % 4 === 3;
 
     for (let i = 0; i < SIXTEENTHS; i++) {
       const tick = bar * TICKS_PER_BAR + i * SIXTEENTH;
+
+      if (fillBar && i >= 12) {
+        events.push({
+          tick,
+          durationTicks: SIXTEENTH,
+          midiNote: 60,
+          velocity: 0.6 + (i - 12) * 0.13, // rises into the downbeat
+          instrument: DRUMS.snare,
+        });
+        continue;
+      }
 
       if (drumsOn && kicks.has(i) && (strongKick.has(i) || rng.chance(drumDensity))) {
         const strong = strongKick.has(i);

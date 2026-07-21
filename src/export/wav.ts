@@ -1,5 +1,5 @@
 import type { Song } from '../core/types';
-import { createNoiseBuffer, scheduleArp, scheduleTone } from '../player/synth';
+import { createNoiseBuffer, scheduleArp, scheduleTone, swingDelaySeconds } from '../player/synth';
 import type { SynthTargets } from '../player/synth';
 
 /** Minimal shape of an AudioBuffer, so the encoder is testable without one. */
@@ -86,7 +86,8 @@ export async function renderSong(song: Song, loops = 2, sampleRate = 44100): Pro
     const base = lead + loop * loopSec;
     for (const { event, trackInstrument } of flat) {
       const instrument = event.instrument ?? trackInstrument;
-      const time = base + event.tick * secondsPerTick;
+      const time =
+        base + event.tick * secondsPerTick + swingDelaySeconds(event.tick, secondsPerTick, song.ticksPerBeat, song.swing);
       const duration = event.durationTicks * secondsPerTick;
       if (event.arpNotes && event.arpNotes.length > 0 && instrument.arpRateHz) {
         scheduleArp(targets, instrument, event.arpNotes, event.velocity, time, duration);

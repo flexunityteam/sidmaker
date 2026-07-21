@@ -23,6 +23,23 @@ export function midiToFreq(midiNote: number): number {
   return 440 * Math.pow(2, (midiNote - 69) / 12);
 }
 
+/**
+ * Seconds to push a note late for swing: off-beat sixteenths get delayed by
+ * `swing` of a sixteenth, on-beat ones are untouched. Shared by live playback
+ * and the offline exporter so a rendered file grooves like what you hear.
+ */
+export function swingDelaySeconds(
+  tick: number,
+  secondsPerTick: number,
+  ticksPerBeat: number,
+  swing: number,
+): number {
+  if (swing <= 0) return 0;
+  const sixteenthTicks = ticksPerBeat / 4;
+  const position = Math.round(tick / sixteenthTicks);
+  return position % 2 === 1 ? swing * sixteenthTicks * secondsPerTick : 0;
+}
+
 export function createNoiseBuffer(ctx: BaseAudioContext): AudioBuffer {
   const buffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   const data = buffer.getChannelData(0);

@@ -74,6 +74,7 @@ app.innerHTML = `
     </div>
 
     <div class="status" id="status">Ready.<span class="cursor"></span></div>
+    <div class="counter" id="counter"></div>
   </div>
 `;
 
@@ -226,3 +227,23 @@ seedInput.addEventListener('keydown', (e) => {
 // block audio until the first click).
 const fromHash = parseShare(location.hash);
 if (fromHash) loadTune(fromHash, 'Loaded a shared tune - press play:');
+
+// Shared visit counter (a Cloudflare Pages Function backed by KV). Counts each
+// browser once per day; on any failure the line simply stays hidden.
+async function loadCounter(): Promise<void> {
+  const counterEl = document.getElementById('counter')!;
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const flag = `sidmaker_counted_${today}`;
+    const counted = localStorage.getItem(flag) !== null;
+    const res = await fetch(`/count${counted ? '?peek' : ''}`);
+    if (!res.ok) return;
+    const data = (await res.json()) as { count?: number };
+    if (typeof data.count !== 'number') return;
+    if (!counted) localStorage.setItem(flag, '1');
+    counterEl.textContent = `◉ ${data.count.toLocaleString()} visitors`;
+  } catch {
+    // Offline, or the endpoint isn't available (e.g. local dev): hide it.
+  }
+}
+void loadCounter();

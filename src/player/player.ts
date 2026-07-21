@@ -1,5 +1,5 @@
 import type { Instrument, NoteEvent, Song } from '../core/types';
-import { createNoiseBuffer, midiToFreq, scheduleArp, scheduleTone } from './synth';
+import { createNoiseBuffer, midiToFreq, scheduleArp, scheduleTone, swingDelaySeconds } from './synth';
 import type { SynthTargets } from './synth';
 
 export type AudioContextFactory = () => AudioContext;
@@ -127,7 +127,8 @@ export class Player {
         this.nextEventIndex = 0;
       }
       const event = this.sortedEvents[this.nextEventIndex];
-      const startTime = this.loopStartTime + event.tick * spt;
+      const startTime =
+        this.loopStartTime + event.tick * spt + swingDelaySeconds(event.tick, spt, song.ticksPerBeat, song.swing);
       if (startTime > horizon) break;
       this.nextEventIndex++;
       if (startTime < ctx.currentTime - 0.02) continue;

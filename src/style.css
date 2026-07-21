@@ -205,6 +205,15 @@ button:disabled {
   white-space: pre-line;
 }
 
+.counter {
+  margin-top: 1rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  opacity: 0.7;
+  text-align: right;
+  min-height: 1em;
+}
+
 .cursor {
   display: inline-block;
   width: 0.6em;

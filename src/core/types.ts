@@ -81,4 +81,10 @@ export interface Song {
   tracks: Track[];
   /** Seed that produced this song (same seed + options => same song) */
   seed: number;
+  /**
+   * Swing amount, 0..0.5: how far off-beat sixteenths are pushed late, as a
+   * fraction of a sixteenth. Applied at render time by the player and exporter,
+   * so ticks stay on the grid. 0 = straight.
+   */
+  swing: number;
 }

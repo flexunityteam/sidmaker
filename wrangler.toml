@@ -1,0 +1,9 @@
+# Cloudflare Pages config for the sidmaker project. Enables the /count Pages
+# Function and binds the KV namespace it uses for the visit counter.
+name = "sidmaker"
+compatibility_date = "2025-06-01"
+pages_build_output_dir = "dist"
+
+[[kv_namespaces]]
+binding = "COUNTER"
+id = "186070a79d804f969cb6167d73267c89"

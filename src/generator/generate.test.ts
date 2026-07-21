@@ -103,6 +103,26 @@ describe('musical features', () => {
     expect(noiseHits.length).toBeGreaterThan(0);
   });
 
+  it('assigns a swing amount from the mood set (bubbly stays straight)', () => {
+    for (const seed of [1, 2, 3, 7, 11]) {
+      expect([0, 0.08, 0.12]).toContain(generateSong(seed, baseOptions('hero')).swing);
+      expect(generateSong(seed, baseOptions('bubbly')).swing).toBe(0);
+    }
+  });
+
+  it('adds a drum fill at the end of a phrase', () => {
+    const song = generateSong(4, baseOptions('hero'));
+    const voice = song.tracks.find((t) => t.name === 'bass+drums')!;
+    const barTicks = song.ticksPerBeat * 4;
+    // First phrase ends on bar index 5 (2 intro + bars 0..3); its last beat.
+    const fillBar = 5;
+    const lastBeatStart = fillBar * barTicks + 3 * song.ticksPerBeat;
+    const fillHits = voice.events.filter(
+      (e) => e.tick >= lastBeatStart && e.tick < (fillBar + 1) * barTicks && e.instrument?.waveform === 'noise',
+    );
+    expect(fillHits.length).toBeGreaterThanOrEqual(3); // a little snare roll
+  });
+
   it('intro bars have no drums (a build-up before the beat drops)', () => {
     const song = generateSong(9, baseOptions('hero'));
     const voice = song.tracks.find((t) => t.name === 'bass+drums')!;
