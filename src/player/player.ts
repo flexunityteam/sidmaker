@@ -1,5 +1,5 @@
 import type { Instrument, NoteEvent, Song } from '../core/types';
-import { createNoiseBuffer, midiToFreq, scheduleArp, scheduleTone, swingDelaySeconds } from './synth';
+import { connectFilterSweep, createNoiseBuffer, midiToFreq, scheduleArp, scheduleTone, swingDelaySeconds } from './synth';
 import type { SynthTargets } from './synth';
 
 export type AudioContextFactory = () => AudioContext;
@@ -49,6 +49,15 @@ export class Player {
     if (this.master) {
       this.master.gain.cancelScheduledValues(ctx.currentTime);
       this.master.gain.setValueAtTime(Player.MASTER_GAIN, ctx.currentTime);
+    }
+
+    // Fresh filter sweep for this song; tracked so stop() tears it down.
+    if (this.filter) {
+      const lfo = connectFilterSweep(ctx, this.filter, song.filter, ctx.currentTime);
+      if (lfo) {
+        this.activeSources.add(lfo);
+        lfo.addEventListener('ended', () => this.activeSources.delete(lfo));
+      }
     }
 
     this.loopStartTime = ctx.currentTime + 0.1;

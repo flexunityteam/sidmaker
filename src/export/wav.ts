@@ -1,5 +1,5 @@
 import type { Song } from '../core/types';
-import { createNoiseBuffer, scheduleArp, scheduleTone, swingDelaySeconds } from '../player/synth';
+import { connectFilterSweep, createNoiseBuffer, scheduleArp, scheduleTone, swingDelaySeconds } from '../player/synth';
 import type { SynthTargets } from '../player/synth';
 
 /** Minimal shape of an AudioBuffer, so the encoder is testable without one. */
@@ -73,6 +73,7 @@ export async function renderSong(song: Song, loops = 2, sampleRate = 44100): Pro
   filter.frequency.value = 9000;
   filter.connect(master);
   master.connect(ctx.destination);
+  connectFilterSweep(ctx, filter, song.filter, 0);
 
   const targets: SynthTargets = {
     ctx,

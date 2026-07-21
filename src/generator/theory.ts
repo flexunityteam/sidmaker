@@ -5,7 +5,8 @@ export type ScaleName =
   | 'minor'
   | 'harmonicMinor'
   | 'dorian'
-  | 'phrygian';
+  | 'phrygian'
+  | 'lydian';
 
 /** Semitone offsets from the tonic */
 export const SCALES: Record<ScaleName, readonly number[]> = {
@@ -14,6 +15,7 @@ export const SCALES: Record<ScaleName, readonly number[]> = {
   harmonicMinor: [0, 2, 3, 5, 7, 8, 11],
   dorian: [0, 2, 3, 5, 7, 9, 10],
   phrygian: [0, 1, 3, 5, 7, 8, 10],
+  lydian: [0, 2, 4, 6, 7, 9, 11],
 };
 
 /**
@@ -28,6 +30,7 @@ export const MELODY_MASKS: Record<ScaleName, readonly number[]> = {
   harmonicMinor: [0, 2, 3, 4, 6], // minor pentatonic over the exotic mode
   dorian: [0, 2, 3, 4, 5], // 1 b3 4 5 6 — the bright Dorian sixth
   phrygian: [0, 1, 3, 4, 6], // 1 b2 4 5 b7 — the dark Phrygian second
+  lydian: [0, 1, 2, 4, 5], // 1 2 3 5 6 — dreamy, sidesteps the sharp fourth
 };
 
 /** Curated pools of chord progressions per scale family, as 0-based degrees. */
@@ -63,6 +66,7 @@ export const PROGRESSIONS: Record<ScaleName, readonly (readonly number[])[]> = {
   harmonicMinor: MINOR_PROGRESSIONS,
   dorian: MINOR_PROGRESSIONS,
   phrygian: MINOR_PROGRESSIONS,
+  lydian: MAJOR_PROGRESSIONS,
 };
 
 /** MIDI note for a scale degree, handling octave wrap for degrees >= 7. */

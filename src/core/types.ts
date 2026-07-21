@@ -87,4 +87,15 @@ export interface Song {
    * so ticks stay on the grid. 0 = straight.
    */
   swing: number;
+  /** Slow low-pass filter sweep on the master bus, for movement. */
+  filter: FilterSweep;
+}
+
+export interface FilterSweep {
+  /** Centre cutoff frequency in Hz */
+  center: number;
+  /** How far the cutoff swings above/below centre, in Hz */
+  depth: number;
+  /** Sweep speed in Hz (cycles per second), e.g. 0.1 = one sweep every 10s */
+  rateHz: number;
 }

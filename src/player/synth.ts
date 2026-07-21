@@ -1,4 +1,4 @@
-import type { Instrument } from '../core/types';
+import type { FilterSweep, Instrument } from '../core/types';
 
 /**
  * Voice synthesis, shared by the realtime Player and the offline WAV exporter.
@@ -38,6 +38,30 @@ export function swingDelaySeconds(
   const sixteenthTicks = ticksPerBeat / 4;
   const position = Math.round(tick / sixteenthTicks);
   return position % 2 === 1 ? swing * sixteenthTicks * secondsPerTick : 0;
+}
+
+/**
+ * Drive a low-pass filter's cutoff with a slow LFO for movement. Returns the
+ * LFO node (so the caller can track/stop it), or null if there's no sweep.
+ */
+export function connectFilterSweep(
+  ctx: BaseAudioContext,
+  filter: BiquadFilterNode,
+  sweep: FilterSweep,
+  startTime: number,
+): OscillatorNode | null {
+  filter.frequency.setValueAtTime(sweep.center, startTime);
+  if (sweep.depth <= 0 || sweep.rateHz <= 0) return null;
+  const lfo = ctx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = sweep.rateHz;
+  const depth = ctx.createGain();
+  depth.gain.value = sweep.depth;
+  lfo.connect(depth);
+  depth.connect(filter.frequency);
+  lfo.addEventListener('ended', () => depth.disconnect());
+  lfo.start(startTime);
+  return lfo;
 }
 
 export function createNoiseBuffer(ctx: BaseAudioContext): AudioBuffer {

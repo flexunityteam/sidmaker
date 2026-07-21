@@ -1,7 +1,7 @@
 import type { GenerateOptions } from './generator/generate';
 import type { LengthChoice, MoodName, TempoChoice } from './generator/moods';
 
-const MOODS: MoodName[] = ['hero', 'dark', 'bubbly', 'chill'];
+const MOODS: MoodName[] = ['hero', 'dark', 'bubbly', 'chill', 'boss', 'title', 'aqua'];
 const TEMPOS: TempoChoice[] = ['slow', 'mid', 'fast'];
 const LENGTHS: LengthChoice[] = ['short', 'long'];
 

@@ -13,6 +13,9 @@ const MOOD_LABELS: Record<MoodName, string> = {
   dark: 'Dark',
   bubbly: 'Bubbly',
   chill: 'Chill',
+  boss: 'Boss',
+  title: 'Title',
+  aqua: 'Aqua',
 };
 
 const state: GenerateOptions & { song: Song | null } = {

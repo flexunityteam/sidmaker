@@ -1,7 +1,7 @@
 import type { Instrument } from '../core/types';
 import type { ScaleName } from './theory';
 
-export type MoodName = 'hero' | 'dark' | 'bubbly' | 'chill';
+export type MoodName = 'hero' | 'dark' | 'bubbly' | 'chill' | 'boss' | 'title' | 'aqua';
 export type TempoChoice = 'slow' | 'mid' | 'fast';
 export type LengthChoice = 'short' | 'long';
 
@@ -115,6 +115,74 @@ export const MOODS: Record<MoodName, MoodConfig> = {
       arpRateHz: 28,
     },
     bass: { waveform: 'triangle', adsr: { a: 0.01, d: 0.1, s: 0.8, r: 0.1 }, gain: 0.34 },
+  },
+
+  // Boss battle: aggressive Phrygian, fast, buzzy sawtooth lead, relentless drums.
+  boss: {
+    scale: 'phrygian',
+    bpm: { slow: [124, 138], mid: [144, 162], fast: [168, 186] },
+    drumDensity: 1,
+    hatDensity: 0.85,
+    bassStyles: ['octave16', 'hubbard'],
+    lead: {
+      waveform: 'sawtooth',
+      adsr: { a: 0.005, d: 0.07, s: 0.6, r: 0.07 },
+      gain: 0.27,
+      vibrato: { rateHz: 6.5, depthCents: 30, delaySec: 0.14 },
+    },
+    arp: {
+      waveform: 'sawtooth',
+      adsr: { a: 0.004, d: 0.04, s: 0.4, r: 0.04 },
+      gain: 0.15,
+      arpRateHz: 44,
+    },
+    bass: { waveform: 'sawtooth', adsr: { a: 0.004, d: 0.1, s: 0.8, r: 0.05 }, gain: 0.33 },
+  },
+
+  // Title screen: epic major, wide quarter-pulse lead, stately mid tempo.
+  title: {
+    scale: 'major',
+    bpm: { slow: [96, 108], mid: [116, 132], fast: [140, 156] },
+    drumDensity: 0.9,
+    hatDensity: 0.55,
+    bassStyles: ['hubbard', 'root8'],
+    lead: {
+      waveform: 'pulse',
+      pulseWidth: 0.35,
+      adsr: { a: 0.02, d: 0.1, s: 0.7, r: 0.14 },
+      gain: 0.3,
+      vibrato: { rateHz: 5.5, depthCents: 24, delaySec: 0.22 },
+    },
+    arp: {
+      waveform: 'pulse',
+      pulseWidth: 0.3,
+      adsr: { a: 0.006, d: 0.06, s: 0.55, r: 0.06 },
+      gain: 0.15,
+      arpRateHz: 34,
+    },
+    bass: { waveform: 'pulse', pulseWidth: 0.5, adsr: { a: 0.006, d: 0.1, s: 0.72, r: 0.06 }, gain: 0.32 },
+  },
+
+  // Underwater: dreamy Lydian, soft triangle, slow, deep gentle vibrato.
+  aqua: {
+    scale: 'lydian',
+    bpm: { slow: [66, 78], mid: [84, 96], fast: [100, 114] },
+    drumDensity: 0.4,
+    hatDensity: 0.3,
+    bassStyles: ['root8', 'hubbard'],
+    lead: {
+      waveform: 'triangle',
+      adsr: { a: 0.04, d: 0.12, s: 0.75, r: 0.2 },
+      gain: 0.32,
+      vibrato: { rateHz: 4.5, depthCents: 20, delaySec: 0.28 },
+    },
+    arp: {
+      waveform: 'triangle',
+      adsr: { a: 0.015, d: 0.08, s: 0.55, r: 0.1 },
+      gain: 0.18,
+      arpRateHz: 26,
+    },
+    bass: { waveform: 'triangle', adsr: { a: 0.015, d: 0.12, s: 0.82, r: 0.12 }, gain: 0.33 },
   },
 };
 

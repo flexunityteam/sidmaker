@@ -133,6 +133,42 @@ describe('musical features', () => {
     );
     expect(introPercussion.length).toBe(0);
   });
+
+  it.each(ALL_MOODS)('%s: has a sane filter sweep', (mood) => {
+    const f = generateSong(2, baseOptions(mood)).filter;
+    expect(f.center).toBeGreaterThanOrEqual(1500);
+    expect(f.center).toBeLessThanOrEqual(11000);
+    expect(f.depth).toBeGreaterThan(0);
+    expect(f.rateHz).toBeGreaterThan(0);
+  });
+
+  it('long songs have a drum breakdown (a stretch of bars with no drums)', () => {
+    const song = generateSong(12, { mood: 'hero', tempo: 'mid', length: 'long' });
+    const voice = song.tracks.find((t) => t.name === 'bass+drums')!;
+    const barTicks = song.ticksPerBeat * 4;
+    const totalBars = song.lengthTicks / barTicks;
+    const isDrum = (e: (typeof voice.events)[number]) =>
+      e.instrument?.waveform === 'noise' || (e.instrument?.adsr.s === 0 && e.midiNote < 45);
+    let drumless = 0;
+    for (let bar = 2; bar < totalBars; bar++) {
+      const hits = voice.events.filter((e) => e.tick >= bar * barTicks && e.tick < (bar + 1) * barTicks && isDrum(e));
+      if (hits.length === 0) drumless++;
+    }
+    expect(drumless).toBeGreaterThanOrEqual(3); // the ~4-bar breakdown section
+  });
+
+  it('the B section melody differs from the A section', () => {
+    const song = generateSong(7, { mood: 'title', tempo: 'mid', length: 'long' });
+    const lead = song.tracks.find((t) => t.name === 'lead')!;
+    const barTicks = song.ticksPerBeat * 4;
+    const rel = (startBar: number) =>
+      lead.events
+        .filter((e) => e.tick >= startBar * barTicks && e.tick < (startBar + 4) * barTicks)
+        .map((e) => `${e.tick - startBar * barTicks}:${e.midiNote}`)
+        .join(',');
+    // Section A starts at bar 2; the B section (form index 2) at bar 10.
+    expect(rel(2)).not.toBe(rel(10));
+  });
 });
 
 describe('variety across seeds (same mood)', () => {

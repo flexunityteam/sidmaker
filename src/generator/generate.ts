@@ -1,5 +1,5 @@
 import { Rng } from '../core/rng';
-import type { Instrument, NoteEvent, Song, Track } from '../core/types';
+import type { FilterSweep, Instrument, NoteEvent, Song, Track } from '../core/types';
 import { DRUMS, MOODS } from './moods';
 import type { BassStyle, LengthChoice, MoodName, TempoChoice } from './moods';
 import {
@@ -22,6 +22,8 @@ const BEATS_PER_BAR = 4;
 const TICKS_PER_BAR = TICKS_PER_BEAT * BEATS_PER_BAR;
 const EIGHTH = TICKS_PER_BEAT / 2; // 4 ticks
 const SIXTEENTH = TICKS_PER_BEAT / 4; // 2 ticks
+const INTRO_BARS = 2;
+const SECTION_BARS = 4;
 
 /** Melody rhythm templates: note durations in ticks, summing to one bar (32). */
 const RHYTHM_TEMPLATES: readonly (readonly number[])[] = [
@@ -72,9 +74,43 @@ const SWING_BY_MOOD: Record<MoodName, readonly number[]> = {
   dark: [0, 0.1, 0.15],
   bubbly: [0, 0, 0], // stays straight and punchy
   chill: [0.12, 0.16, 0.2],
+  boss: [0, 0, 0.06],
+  title: [0, 0.08],
+  aqua: [0.14, 0.18, 0.22],
+};
+
+/** Base low-pass sweep per mood; the centre is jittered slightly per song. */
+const FILTER_BY_MOOD: Record<MoodName, FilterSweep> = {
+  hero: { center: 8000, depth: 3000, rateHz: 0.12 },
+  dark: { center: 4500, depth: 2500, rateHz: 0.08 },
+  bubbly: { center: 9000, depth: 2000, rateHz: 0.2 },
+  chill: { center: 5000, depth: 3000, rateHz: 0.06 },
+  boss: { center: 6500, depth: 4000, rateHz: 0.16 },
+  title: { center: 8500, depth: 3000, rateHz: 0.1 },
+  aqua: { center: 3800, depth: 3200, rateHz: 0.05 },
 };
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+interface Motif {
+  rhythm: readonly number[];
+  contour: number[];
+}
+
+/** Which of the three melodic voices sound in a given bar. */
+interface LayerFlags {
+  lead: boolean;
+  arp: boolean;
+  drums: boolean;
+}
+
+/** A 4-bar section of the song form. */
+interface Section {
+  startBar: number;
+  label: 'A' | 'B';
+  chords: number[];
+  motif: Motif;
+}
 
 interface Variety {
   bassStyle: BassStyle;
@@ -86,19 +122,16 @@ interface Variety {
   baseShift: number;
 }
 
-interface Motif {
-  rhythm: readonly number[];
-  contour: number[];
-}
-
 interface SongContext {
   rng: Rng;
   scale: readonly number[];
   mask: readonly number[];
   tonicMidi: number;
   chordByBar: number[];
-  isIntro: boolean[];
   totalBars: number;
+  firstMainBar: number;
+  arrangement: LayerFlags[];
+  sections: Section[];
   variety: Variety;
 }
 
@@ -124,10 +157,20 @@ export function generateSong(seed: number, options: GenerateOptions): Song {
   const [bpmMin, bpmMax] = mood.bpm[options.tempo];
   const bpm = rng.range(bpmMin, bpmMax);
   const tonicMidi = rng.range(48, 59);
-  const progression = rng.pick(PROGRESSIONS[mood.scale]);
-  const swing = rng.pick(SWING_BY_MOOD[options.mood]);
 
-  // Per-song variety: the layers a listener actually distinguishes.
+  const pool = PROGRESSIONS[mood.scale];
+  const progA = rng.pick(pool);
+  let progB = rng.pick(pool);
+  for (let guard = 0; guard < 8 && progB === progA; guard++) progB = rng.pick(pool);
+
+  const swing = rng.pick(SWING_BY_MOOD[options.mood]);
+  const fbase = FILTER_BY_MOOD[options.mood];
+  const filter: FilterSweep = {
+    center: clamp(fbase.center + rng.range(-800, 800), 1500, 11000),
+    depth: fbase.depth,
+    rateHz: fbase.rateHz,
+  };
+
   const variety: Variety = {
     bassStyle: rng.pick(mood.bassStyles),
     drums: rng.pick(DRUM_PATTERNS),
@@ -149,24 +192,51 @@ export function generateSong(seed: number, options: GenerateOptions): Song {
     arpRateHz: clamp((mood.arp.arpRateHz ?? 36) + rng.range(-4, 6), 22, 48),
   };
 
-  const INTRO_BARS = 2;
-  const mainRepeats = options.length === 'long' ? 4 : 2;
-  const totalBars = INTRO_BARS + progression.length * mainRepeats;
+  // Song form: an A/B arrangement so tunes have a verse/chorus contrast.
+  const isLong = options.length === 'long';
+  const form: ('A' | 'B')[] = isLong ? ['A', 'A', 'B', 'A'] : ['A', 'B'];
+  const firstMainBar = INTRO_BARS;
+  const totalBars = INTRO_BARS + form.length * SECTION_BARS;
+  const progByLabel = { A: progA, B: progB };
+  const motifByLabel = { A: variety.motifA, B: variety.motifB };
 
   const chordByBar: number[] = [];
-  const isIntro: boolean[] = [];
-  for (let bar = 0; bar < INTRO_BARS; bar++) {
-    chordByBar.push(progression[0]);
-    isIntro.push(true);
-  }
-  for (let rep = 0; rep < mainRepeats; rep++) {
-    for (const degree of progression) {
-      chordByBar.push(degree);
-      isIntro.push(false);
+  for (let i = 0; i < INTRO_BARS; i++) chordByBar.push(progA[0]);
+  const sections: Section[] = form.map((label, si) => {
+    const chords = progByLabel[label];
+    const startBar = firstMainBar + si * SECTION_BARS;
+    for (let b = 0; b < SECTION_BARS; b++) chordByBar.push(chords[b]);
+    return { startBar, label, chords: [...chords], motif: motifByLabel[label] };
+  });
+
+  // Arrangement: sparse intro (arp + bass), full sections, and — on long songs
+  // — a "breakdown" on the B section where the drums (and sometimes the arp)
+  // drop out, before the beat returns.
+  const breakdownSection = isLong ? form.indexOf('B') : -1;
+  const breakdownArpOff = isLong && rng.chance(0.5);
+  const arrangement: LayerFlags[] = [];
+  for (let bar = 0; bar < totalBars; bar++) {
+    if (bar < INTRO_BARS) {
+      arrangement.push({ lead: false, arp: true, drums: false });
+      continue;
     }
+    const si = Math.floor((bar - firstMainBar) / SECTION_BARS);
+    const isBreakdown = si === breakdownSection;
+    arrangement.push({ lead: true, arp: isBreakdown ? !breakdownArpOff : true, drums: !isBreakdown });
   }
 
-  const ctx: SongContext = { rng, scale, mask, tonicMidi, chordByBar, isIntro, totalBars, variety };
+  const ctx: SongContext = {
+    rng,
+    scale,
+    mask,
+    tonicMidi,
+    chordByBar,
+    totalBars,
+    firstMainBar,
+    arrangement,
+    sections,
+    variety,
+  };
 
   const tracks: Track[] = [
     { name: 'lead', instrument: leadInst, events: generateMelody(ctx) },
@@ -174,40 +244,39 @@ export function generateSong(seed: number, options: GenerateOptions): Song {
     { name: 'bass+drums', instrument: mood.bass, events: generateBassAndDrums(ctx, mood.drumDensity, mood.hatDensity) },
   ];
 
-  return { bpm, ticksPerBeat: TICKS_PER_BEAT, lengthTicks: totalBars * TICKS_PER_BAR, tracks, seed, swing };
+  return { bpm, ticksPerBeat: TICKS_PER_BEAT, lengthTicks: totalBars * TICKS_PER_BAR, tracks, seed, swing, filter };
 }
 
 // ---------------------------------------------------------------------------
-// Melody: two motifs (A and B) walked on a pentatonic ladder, laid out A A B B
-// so each tune has a recognisable idea and an answering phrase, and different
-// songs get genuinely different melodic and rhythmic material.
+// Melody: one 4-bar phrase per section type (A, B) walked on a pentatonic
+// ladder. Repeated A sections reuse the same phrase (a recognisable hook); the
+// B section brings its own material for contrast.
 // ---------------------------------------------------------------------------
 
 function generateMelody(ctx: SongContext): NoteEvent[] {
-  const { rng, chordByBar, isIntro, variety } = ctx;
-  const firstMainBar = isIntro.filter(Boolean).length;
-  const mainBars = ctx.totalBars - firstMainBar;
-  const phraseLen = 4;
-  const base = ctx.mask.length + variety.baseShift;
+  const base = ctx.mask.length + ctx.variety.baseShift;
   const restChance = 0.1;
+  const phraseCache = new Map<'A' | 'B', NoteEvent[][]>();
 
-  // A A B B, with the B phrase resolving to the tonic on its last bar.
-  const motifFor = (b: number) => (b < 2 ? variety.motifA : variety.motifB);
-  const phrase: NoteEvent[][] = [];
-  for (let b = 0; b < phraseLen; b++) {
-    const motif = motifFor(b);
-    phrase.push(renderMotifBar(ctx, motif, chordByBar[firstMainBar + b], base, b === phraseLen - 1, restChance));
-  }
+  const phraseFor = (section: Section): NoteEvent[][] => {
+    const cached = phraseCache.get(section.label);
+    if (cached) return cached;
+    const bars: NoteEvent[][] = [];
+    for (let b = 0; b < SECTION_BARS; b++) {
+      bars.push(renderMotifBar(ctx, section.motif, section.chords[b], base, b === SECTION_BARS - 1, restChance));
+    }
+    phraseCache.set(section.label, bars);
+    return bars;
+  };
 
   const events: NoteEvent[] = [];
-  for (let bar = 0; bar < mainBars; bar++) {
-    const absoluteBar = firstMainBar + bar;
-    const barInPhrase = bar % phraseLen;
-    let barEvents = phrase[barInPhrase];
-    if (bar >= phraseLen && barInPhrase === phraseLen - 1 && rng.chance(0.5)) {
-      barEvents = renderMotifBar(ctx, motifFor(barInPhrase), chordByBar[absoluteBar], base, true, restChance);
+  for (const section of ctx.sections) {
+    const bars = phraseFor(section);
+    for (let b = 0; b < SECTION_BARS; b++) {
+      const absoluteBar = section.startBar + b;
+      if (!ctx.arrangement[absoluteBar].lead) continue;
+      for (const e of bars[b]) events.push({ ...e, tick: e.tick + absoluteBar * TICKS_PER_BAR });
     }
-    for (const e of barEvents) events.push({ ...e, tick: e.tick + absoluteBar * TICKS_PER_BAR });
   }
   return events;
 }
@@ -287,11 +356,12 @@ function nearestTonicLadderPos(len: number, pos: number): number {
 // ---------------------------------------------------------------------------
 
 function generateArpeggio(ctx: SongContext): NoteEvent[] {
-  const { scale, tonicMidi, chordByBar, variety } = ctx;
+  const { scale, tonicMidi, chordByBar, variety, arrangement } = ctx;
   const events: NoteEvent[] = [];
   const rootMidi = tonicMidi + 12 + variety.arpOctave;
 
   for (let bar = 0; bar < ctx.totalBars; bar++) {
+    if (!arrangement[bar].arp) continue;
     const triad = chordMidiNotes(rootMidi, scale, chordByBar[bar]);
     const cycle = variety.arpShape(triad);
     for (let beat = 0; beat < BEATS_PER_BAR; beat++) {
@@ -308,8 +378,8 @@ function generateArpeggio(ctx: SongContext): NoteEvent[] {
 }
 
 // ---------------------------------------------------------------------------
-// Shared voice 3: a drum pattern, a driving bassline, and off-beat hats,
-// multiplexed onto one channel the way real SID tunes did.
+// Shared voice 3: the bassline always plays; the drum pattern, fills and hats
+// only sound where the arrangement enables drums for that bar.
 // ---------------------------------------------------------------------------
 
 const KICK_NOTE = 34;
@@ -331,19 +401,18 @@ function bassDegree(style: BassStyle, chordDeg: number, i: number): number | nul
 }
 
 function generateBassAndDrums(ctx: SongContext, drumDensity: number, hatDensity: number): NoteEvent[] {
-  const { rng, scale, tonicMidi, chordByBar, isIntro, variety } = ctx;
+  const { rng, scale, tonicMidi, chordByBar, arrangement, firstMainBar, variety } = ctx;
   const events: NoteEvent[] = [];
   const SIXTEENTHS = TICKS_PER_BAR / SIXTEENTH; // 16
   const kicks = new Set(variety.drums.kick);
   const snares = new Set(variety.drums.snare);
   const strongKick = new Set([0, 8]);
-  const firstMainBar = isIntro.filter(Boolean).length;
 
   for (let bar = 0; bar < ctx.totalBars; bar++) {
     const chordDeg = chordByBar[bar];
-    const drumsOn = !isIntro[bar];
+    const drumsOn = arrangement[bar].drums;
     // A snare fill on the last bar of each 4-bar phrase, leading into the next.
-    const fillBar = drumsOn && (bar - firstMainBar) % 4 === 3;
+    const fillBar = drumsOn && (bar - firstMainBar) % SECTION_BARS === SECTION_BARS - 1;
 
     for (let i = 0; i < SIXTEENTHS; i++) {
       const tick = bar * TICKS_PER_BAR + i * SIXTEENTH;
