@@ -99,7 +99,12 @@ const exportBtn = document.getElementById('export') as HTMLButtonElement;
 const copyBtn = document.getElementById('copylink') as HTMLButtonElement;
 
 function setStatus(text: string): void {
-  statusEl.innerHTML = `${text}<span class="cursor"></span>`;
+  // textContent (not innerHTML) so status text — including error messages and
+  // share links — can never inject markup.
+  statusEl.textContent = text;
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor';
+  statusEl.appendChild(cursor);
 }
 
 function describe(song: Song): string {
