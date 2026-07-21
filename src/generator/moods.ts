@@ -15,7 +15,8 @@ export interface MoodConfig {
   drumDensity: number;
   /** Probability an off-beat hi-hat tick fires */
   hatDensity: number;
-  bassStyle: BassStyle;
+  /** Bass styles this mood may use; one is picked per song. */
+  bassStyles: BassStyle[];
   lead: Instrument;
   arp: Instrument;
   bass: Instrument;
@@ -28,7 +29,7 @@ export const MOODS: Record<MoodName, MoodConfig> = {
     bpm: { slow: [104, 116], mid: [124, 140], fast: [148, 164] },
     drumDensity: 0.95,
     hatDensity: 0.6,
-    bassStyle: 'hubbard',
+    bassStyles: ['hubbard', 'root8', 'octave16'],
     lead: {
       waveform: 'pulse',
       pulseWidth: 0.25,
@@ -52,7 +53,7 @@ export const MOODS: Record<MoodName, MoodConfig> = {
     bpm: { slow: [82, 94], mid: [100, 118], fast: [126, 144] },
     drumDensity: 0.8,
     hatDensity: 0.5,
-    bassStyle: 'octave16',
+    bassStyles: ['octave16', 'hubbard'],
     lead: {
       waveform: 'pulse',
       pulseWidth: 0.15,
@@ -76,7 +77,7 @@ export const MOODS: Record<MoodName, MoodConfig> = {
     bpm: { slow: [116, 128], mid: [136, 152], fast: [158, 176] },
     drumDensity: 0.9,
     hatDensity: 0.8,
-    bassStyle: 'octave16',
+    bassStyles: ['octave16', 'root8', 'hubbard'],
     lead: {
       waveform: 'pulse',
       pulseWidth: 0.125,
@@ -100,7 +101,7 @@ export const MOODS: Record<MoodName, MoodConfig> = {
     bpm: { slow: [72, 84], mid: [88, 100], fast: [106, 120] },
     drumDensity: 0.45,
     hatDensity: 0.35,
-    bassStyle: 'root8',
+    bassStyles: ['root8', 'hubbard'],
     lead: {
       waveform: 'triangle',
       adsr: { a: 0.03, d: 0.1, s: 0.72, r: 0.16 },

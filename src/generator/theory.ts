@@ -36,6 +36,12 @@ const MAJOR_PROGRESSIONS: readonly (readonly number[])[] = [
   [0, 3, 4, 3], // I–IV–V–IV
   [0, 5, 3, 4], // I–vi–IV–V
   [0, 3, 5, 4], // I–IV–vi–V
+  [0, 5, 1, 4], // I–vi–ii–V
+  [0, 4, 1, 4], // I–V–ii–V
+  [0, 3, 0, 4], // I–IV–I–V
+  [0, 2, 3, 4], // I–iii–IV–V
+  [0, 4, 5, 2], // I–V–vi–iii
+  [0, 5, 4, 3], // I–vi–V–IV
 ];
 
 const MINOR_PROGRESSIONS: readonly (readonly number[])[] = [
@@ -44,6 +50,11 @@ const MINOR_PROGRESSIONS: readonly (readonly number[])[] = [
   [0, 6, 5, 6], // i–VII–VI–VII
   [0, 3, 6, 0], // i–iv–VII–i
   [0, 5, 6, 4], // i–VI–VII–v  (heroic minor climb)
+  [0, 2, 5, 6], // i–III–VI–VII
+  [0, 6, 2, 3], // i–VII–III–iv
+  [0, 3, 5, 6], // i–iv–VI–VII
+  [0, 4, 5, 0], // i–v–VI–i
+  [0, 6, 3, 4], // i–VII–iv–v
 ];
 
 export const PROGRESSIONS: Record<ScaleName, readonly (readonly number[])[]> = {

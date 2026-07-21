@@ -77,13 +77,14 @@ describe('generateSong', () => {
 });
 
 describe('musical features', () => {
-  it.each(ALL_MOODS)('%s: arp track carries a 4-note chord on every event', (mood) => {
+  it.each(ALL_MOODS)('%s: arp track carries a chord (3-6 notes) on every event', (mood) => {
     const song = generateSong(3, baseOptions(mood));
     const arp = song.tracks.find((t) => t.name === 'arp')!;
     expect(arp.events.length).toBeGreaterThan(0);
     for (const e of arp.events) {
       expect(e.arpNotes).toBeDefined();
-      expect(e.arpNotes!.length).toBe(4);
+      expect(e.arpNotes!.length).toBeGreaterThanOrEqual(3);
+      expect(e.arpNotes!.length).toBeLessThanOrEqual(6);
     }
   });
 
@@ -111,5 +112,36 @@ describe('musical features', () => {
       (e) => e.tick < 2 * barTicks && e.instrument?.adsr.s === 0,
     );
     expect(introPercussion.length).toBe(0);
+  });
+});
+
+describe('variety across seeds (same mood)', () => {
+  const seeds = Array.from({ length: 24 }, (_, i) => i * 101 + 7);
+  const opts = baseOptions('hero');
+  const songs = seeds.map((s) => generateSong(s, opts));
+  const track = (song: (typeof songs)[number], name: string) => song.tracks.find((t) => t.name === name)!;
+
+  it('picks a range of arpeggio shapes', () => {
+    const lengths = new Set(songs.map((s) => track(s, 'arp').events[0].arpNotes!.length));
+    expect(lengths.size).toBeGreaterThanOrEqual(2);
+  });
+
+  it('produces distinct drum/bass grooves', () => {
+    const barTicks = opts.length === 'short' ? 32 : 32;
+    const groove = (song: (typeof songs)[number]) => {
+      const v = track(song, 'bass+drums');
+      const start = 3 * barTicks;
+      return v.events
+        .filter((e) => e.tick >= start && e.tick < start + barTicks)
+        .map((e) => `${e.tick - start}${e.instrument?.waveform === 'noise' ? 'n' : e.midiNote === 34 ? 'k' : 'b'}`)
+        .join(',');
+    };
+    const grooves = new Set(songs.map(groove));
+    expect(grooves.size).toBeGreaterThanOrEqual(5);
+  });
+
+  it('produces almost entirely distinct melodies', () => {
+    const melodies = new Set(songs.map((s) => JSON.stringify(track(s, 'lead').events)));
+    expect(melodies.size).toBeGreaterThanOrEqual(20);
   });
 });

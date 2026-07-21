@@ -1,5 +1,5 @@
 import { Rng } from '../core/rng';
-import type { NoteEvent, Song, Track } from '../core/types';
+import type { Instrument, NoteEvent, Song, Track } from '../core/types';
 import { DRUMS, MOODS } from './moods';
 import type { BassStyle, LengthChoice, MoodName, TempoChoice } from './moods';
 import {
@@ -32,7 +32,56 @@ const RHYTHM_TEMPLATES: readonly (readonly number[])[] = [
   [8, 8, 12, 4],
   [16, 8, 8],
   [4, 4, 4, 4, 8, 8],
+  [6, 6, 4, 8, 8],
+  [8, 8, 4, 4, 8],
+  [4, 8, 4, 8, 8],
+  [16, 16],
+  [12, 12, 8],
 ];
+
+/** Kick/snare positions on the 16-sixteenth bar grid; one picked per song. */
+interface DrumPattern {
+  kick: number[];
+  snare: number[];
+}
+const DRUM_PATTERNS: readonly DrumPattern[] = [
+  { kick: [0, 8], snare: [4, 12] }, // classic backbeat
+  { kick: [0, 4, 8, 12], snare: [4, 12] }, // four-on-the-floor
+  { kick: [0, 6, 8, 14], snare: [4, 12] }, // syncopated
+  { kick: [0, 8, 11], snare: [4, 12] }, // pushed
+  { kick: [0], snare: [8] }, // half-time
+  { kick: [0, 3, 8, 10], snare: [4, 12] }, // busy
+  { kick: [0, 8, 10, 14], snare: [4, 12] }, // rolling
+];
+
+/** Arp shapes over a triad [root, third, fifth]; one picked per song. */
+type ArpShape = (t: number[]) => number[];
+const ARP_SHAPES: readonly ArpShape[] = [
+  (t) => [t[0], t[1], t[2], t[0] + 12], // ascending + octave
+  (t) => [t[0] + 12, t[2], t[1], t[0]], // descending
+  (t) => [t[0], t[1], t[2], t[0] + 12, t[2], t[1]], // up then down
+  (t) => [t[0], t[0] + 12, t[1], t[2]], // octave lead-in
+  (t) => [t[0], t[2], t[0] + 12, t[2]], // root-fifth-octave
+  (t) => [t[0], t[1], t[2]], // plain triad
+  (t) => [t[2], t[1], t[0], t[1]], // down then up
+];
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+interface Variety {
+  bassStyle: BassStyle;
+  drums: DrumPattern;
+  arpShape: ArpShape;
+  arpOctave: number;
+  motifA: Motif;
+  motifB: Motif;
+  baseShift: number;
+}
+
+interface Motif {
+  rhythm: readonly number[];
+  contour: number[];
+}
 
 interface SongContext {
   rng: Rng;
@@ -42,6 +91,20 @@ interface SongContext {
   chordByBar: number[];
   isIntro: boolean[];
   totalBars: number;
+  variety: Variety;
+}
+
+function makeMotif(rng: Rng): Motif {
+  const rhythm = rng.pick(RHYTHM_TEMPLATES);
+  const contour = rhythm.map((_, i) => {
+    if (i === 0) return 0;
+    const r = rng.next();
+    if (r < 0.5) return rng.chance(0.5) ? 1 : -1; // stepwise
+    if (r < 0.68) return 0; // repeat
+    if (r < 0.88) return rng.chance(0.5) ? 2 : -2; // small leap
+    return rng.chance(0.5) ? 3 : -3; // occasional wide leap
+  });
+  return { rhythm, contour };
 }
 
 export function generateSong(seed: number, options: GenerateOptions): Song {
@@ -53,8 +116,29 @@ export function generateSong(seed: number, options: GenerateOptions): Song {
   const [bpmMin, bpmMax] = mood.bpm[options.tempo];
   const bpm = rng.range(bpmMin, bpmMax);
   const tonicMidi = rng.range(48, 59);
-
   const progression = rng.pick(PROGRESSIONS[mood.scale]);
+
+  // Per-song variety: the layers a listener actually distinguishes.
+  const variety: Variety = {
+    bassStyle: rng.pick(mood.bassStyles),
+    drums: rng.pick(DRUM_PATTERNS),
+    arpShape: rng.pick(ARP_SHAPES),
+    arpOctave: rng.pick([0, 0, 12]),
+    motifA: makeMotif(rng),
+    motifB: makeMotif(rng),
+    baseShift: rng.pick([0, 0, 0, 2, 3]),
+  };
+
+  // Slight per-song timbre jitter so instruments don't sound identical.
+  const jitterPulse = (inst: Instrument): Instrument =>
+    inst.waveform === 'pulse'
+      ? { ...inst, pulseWidth: clamp((inst.pulseWidth ?? 0.5) + rng.pick([-0.05, 0, 0, 0.05, 0.1]), 0.08, 0.5) }
+      : inst;
+  const leadInst = jitterPulse(mood.lead);
+  const arpInst: Instrument = {
+    ...jitterPulse(mood.arp),
+    arpRateHz: clamp((mood.arp.arpRateHz ?? 36) + rng.range(-4, 6), 22, 48),
+  };
 
   const INTRO_BARS = 2;
   const mainRepeats = options.length === 'long' ? 4 : 2;
@@ -73,47 +157,37 @@ export function generateSong(seed: number, options: GenerateOptions): Song {
     }
   }
 
-  const ctx: SongContext = { rng, scale, mask, tonicMidi, chordByBar, isIntro, totalBars };
+  const ctx: SongContext = { rng, scale, mask, tonicMidi, chordByBar, isIntro, totalBars, variety };
 
   const tracks: Track[] = [
-    { name: 'lead', instrument: mood.lead, events: generateMelody(ctx) },
-    { name: 'arp', instrument: mood.arp, events: generateArpeggio(ctx) },
-    { name: 'bass+drums', instrument: mood.bass, events: generateBassAndDrums(ctx, mood.drumDensity, mood.hatDensity, mood.bassStyle) },
+    { name: 'lead', instrument: leadInst, events: generateMelody(ctx) },
+    { name: 'arp', instrument: arpInst, events: generateArpeggio(ctx) },
+    { name: 'bass+drums', instrument: mood.bass, events: generateBassAndDrums(ctx, mood.drumDensity, mood.hatDensity) },
   ];
 
   return { bpm, ticksPerBeat: TICKS_PER_BEAT, lengthTicks: totalBars * TICKS_PER_BAR, tracks, seed };
 }
 
 // ---------------------------------------------------------------------------
-// Melody: a motif developed across the phrase, walked on a pentatonic ladder
-// so it stays consonant and hummable (how classic SID tunes get a real hook).
+// Melody: two motifs (A and B) walked on a pentatonic ladder, laid out A A B B
+// so each tune has a recognisable idea and an answering phrase, and different
+// songs get genuinely different melodic and rhythmic material.
 // ---------------------------------------------------------------------------
 
 function generateMelody(ctx: SongContext): NoteEvent[] {
-  const { rng, chordByBar, isIntro } = ctx;
+  const { rng, chordByBar, isIntro, variety } = ctx;
   const firstMainBar = isIntro.filter(Boolean).length;
   const mainBars = ctx.totalBars - firstMainBar;
   const phraseLen = 4;
-
-  // One motif: a fixed rhythm plus a contour of ladder-step deltas. Keeping
-  // the rhythm constant across the phrase is what makes the tune recognisable.
-  const rhythm = rng.pick(RHYTHM_TEMPLATES);
-  const contour = rhythm.map((_, i) => {
-    if (i === 0) return 0;
-    const r = rng.next();
-    if (r < 0.55) return rng.chance(0.5) ? 1 : -1; // stepwise
-    if (r < 0.75) return 0; // repeat
-    return rng.chance(0.5) ? 2 : -2; // small leap
-  });
-
-  const base = ctx.mask.length; // one octave above the tonic on the ladder
+  const base = ctx.mask.length + variety.baseShift;
   const restChance = 0.1;
 
-  // Develop the motif over one 4-bar phrase: bar 3 inverts it, bar 4 cadences.
+  // A A B B, with the B phrase resolving to the tonic on its last bar.
+  const motifFor = (b: number) => (b < 2 ? variety.motifA : variety.motifB);
   const phrase: NoteEvent[][] = [];
   for (let b = 0; b < phraseLen; b++) {
-    const chordDeg = chordByBar[firstMainBar + b];
-    phrase.push(renderMotifBar(ctx, rhythm, contour, chordDeg, base, b === phraseLen - 1, b === 2, restChance));
+    const motif = motifFor(b);
+    phrase.push(renderMotifBar(ctx, motif, chordByBar[firstMainBar + b], base, b === phraseLen - 1, restChance));
   }
 
   const events: NoteEvent[] = [];
@@ -122,8 +196,7 @@ function generateMelody(ctx: SongContext): NoteEvent[] {
     const barInPhrase = bar % phraseLen;
     let barEvents = phrase[barInPhrase];
     if (bar >= phraseLen && barInPhrase === phraseLen - 1 && rng.chance(0.5)) {
-      // Refresh the cadence bar on later passes so the loop breathes.
-      barEvents = renderMotifBar(ctx, rhythm, contour, chordByBar[absoluteBar], base, true, false, restChance);
+      barEvents = renderMotifBar(ctx, motifFor(barInPhrase), chordByBar[absoluteBar], base, true, restChance);
     }
     for (const e of barEvents) events.push({ ...e, tick: e.tick + absoluteBar * TICKS_PER_BAR });
   }
@@ -132,12 +205,10 @@ function generateMelody(ctx: SongContext): NoteEvent[] {
 
 function renderMotifBar(
   ctx: SongContext,
-  rhythm: readonly number[],
-  contour: readonly number[],
+  motif: Motif,
   chordDeg: number,
   base: number,
   cadence: boolean,
-  invert: boolean,
   restChance: number,
 ): NoteEvent[] {
   const { rng, scale, mask, tonicMidi } = ctx;
@@ -147,16 +218,16 @@ function renderMotifBar(
   let prevMidi: number | null = null;
   let tick = 0;
 
-  rhythm.forEach((duration, i) => {
+  motif.rhythm.forEach((duration, i) => {
     if (i === 0) {
       pos = anchor;
     } else {
-      pos += invert ? -contour[i] : contour[i];
+      pos += motif.contour[i];
     }
-    if (cadence && i === rhythm.length - 1) {
+    if (cadence && i === motif.rhythm.length - 1) {
       pos = nearestTonicLadderPos(mask.length, pos); // resolve to the tonic
     }
-    pos = Math.max(base - mask.length, Math.min(base + mask.length + 1, pos));
+    pos = clamp(pos, base - mask.length, base + mask.length + 1);
 
     if (i !== 0 && rng.chance(restChance)) {
       tick += duration;
@@ -207,14 +278,13 @@ function nearestTonicLadderPos(len: number, pos: number): number {
 // ---------------------------------------------------------------------------
 
 function generateArpeggio(ctx: SongContext): NoteEvent[] {
-  const { rng, scale, tonicMidi, chordByBar } = ctx;
+  const { scale, tonicMidi, chordByBar, variety } = ctx;
   const events: NoteEvent[] = [];
-  const descending = rng.chance(0.5);
+  const rootMidi = tonicMidi + 12 + variety.arpOctave;
 
   for (let bar = 0; bar < ctx.totalBars; bar++) {
-    const triad = chordMidiNotes(tonicMidi + 12, scale, chordByBar[bar]);
-    let cycle = [triad[0], triad[1], triad[2], triad[0] + 12];
-    if (descending) cycle = cycle.slice().reverse();
+    const triad = chordMidiNotes(rootMidi, scale, chordByBar[bar]);
+    const cycle = variety.arpShape(triad);
     for (let beat = 0; beat < BEATS_PER_BAR; beat++) {
       events.push({
         tick: bar * TICKS_PER_BAR + beat * TICKS_PER_BEAT,
@@ -229,7 +299,7 @@ function generateArpeggio(ctx: SongContext): NoteEvent[] {
 }
 
 // ---------------------------------------------------------------------------
-// Shared voice 3: kick/snare backbeat, a driving bassline, and off-beat hats,
+// Shared voice 3: a drum pattern, a driving bassline, and off-beat hats,
 // multiplexed onto one channel the way real SID tunes did.
 // ---------------------------------------------------------------------------
 
@@ -251,15 +321,13 @@ function bassDegree(style: BassStyle, chordDeg: number, i: number): number | nul
   }
 }
 
-function generateBassAndDrums(
-  ctx: SongContext,
-  drumDensity: number,
-  hatDensity: number,
-  bassStyle: BassStyle,
-): NoteEvent[] {
-  const { rng, scale, tonicMidi, chordByBar, isIntro } = ctx;
+function generateBassAndDrums(ctx: SongContext, drumDensity: number, hatDensity: number): NoteEvent[] {
+  const { rng, scale, tonicMidi, chordByBar, isIntro, variety } = ctx;
   const events: NoteEvent[] = [];
   const SIXTEENTHS = TICKS_PER_BAR / SIXTEENTH; // 16
+  const kicks = new Set(variety.drums.kick);
+  const snares = new Set(variety.drums.snare);
+  const strongKick = new Set([0, 8]);
 
   for (let bar = 0; bar < ctx.totalBars; bar++) {
     const chordDeg = chordByBar[bar];
@@ -267,23 +335,24 @@ function generateBassAndDrums(
 
     for (let i = 0; i < SIXTEENTHS; i++) {
       const tick = bar * TICKS_PER_BAR + i * SIXTEENTH;
-      const isDown = i === 0 || i === 8;
-      const isBackbeat = i === 4 || i === 12;
 
-      if (drumsOn && isDown) {
-        events.push({ tick, durationTicks: EIGHTH, midiNote: KICK_NOTE, velocity: 1, instrument: DRUMS.kick });
+      if (drumsOn && kicks.has(i) && (strongKick.has(i) || rng.chance(drumDensity))) {
+        const strong = strongKick.has(i);
+        events.push({
+          tick,
+          durationTicks: EIGHTH,
+          midiNote: KICK_NOTE,
+          velocity: strong ? 1 : 0.8,
+          instrument: DRUMS.kick,
+        });
         continue;
       }
-      if (drumsOn && isBackbeat) {
+      if (drumsOn && snares.has(i)) {
         events.push({ tick, durationTicks: EIGHTH, midiNote: 60, velocity: 1, instrument: DRUMS.snare });
         continue;
       }
-      if (drumsOn && (i === 6 || i === 10) && rng.chance(0.3 * drumDensity)) {
-        events.push({ tick, durationTicks: SIXTEENTH, midiNote: KICK_NOTE, velocity: 0.8, instrument: DRUMS.kick });
-        continue;
-      }
 
-      const deg = bassDegree(bassStyle, chordDeg, i);
+      const deg = bassDegree(variety.bassStyle, chordDeg, i);
       if (deg !== null) {
         const slotTicks = i % 2 === 0 ? EIGHTH : SIXTEENTH;
         events.push({
