@@ -226,6 +226,29 @@ button:disabled {
   min-height: 1em;
 }
 
+.link {
+  color: var(--c64-accent);
+  text-decoration: none;
+}
+
+.link:hover {
+  color: var(--c64-bright);
+  text-shadow: 0 0 8px rgba(154, 226, 155, 0.5);
+}
+
+.c64-frame {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto 1rem;
+  background: #000;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.c64-frame #game {
+  width: 100%;
+}
+
 .cursor {
   display: inline-block;
   width: 0.6em;

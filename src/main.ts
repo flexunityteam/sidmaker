@@ -32,7 +32,7 @@ app.innerHTML = `
   <div class="screen">
     <div class="crt"></div>
     <h1>**** SIDMAKER ****</h1>
-    <p class="subtitle">64K RAM SYSTEM &nbsp; 3 VOICES FREE</p>
+    <p class="subtitle">64K RAM SYSTEM &nbsp; 3 VOICES FREE &nbsp;&middot;&nbsp; <a href="./games.html" class="link">C64 GAMES &#9654;</a></p>
 
     <div class="control-group">
       <div class="label">Mood:</div>
