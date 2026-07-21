@@ -120,6 +120,8 @@ interface Variety {
   motifA: Motif;
   motifB: Motif;
   baseShift: number;
+  snareSound: 'snare' | 'clap';
+  fillStyle: 'snare' | 'tom';
 }
 
 interface SongContext {
@@ -133,6 +135,8 @@ interface SongContext {
   arrangement: LayerFlags[];
   sections: Section[];
   variety: Variety;
+  /** Semitone key shift per bar (a modulated bridge on some long songs). */
+  keyShiftByBar: number[];
 }
 
 function makeMotif(rng: Rng): Motif {
@@ -179,6 +183,8 @@ export function generateSong(seed: number, options: GenerateOptions): Song {
     motifA: makeMotif(rng),
     motifB: makeMotif(rng),
     baseShift: rng.pick([0, 0, 0, 2, 3]),
+    snareSound: rng.pick(['snare', 'snare', 'clap']),
+    fillStyle: rng.pick(['snare', 'tom', 'tom']),
   };
 
   // Slight per-song timbre jitter so instruments don't sound identical.
@@ -225,6 +231,15 @@ export function generateSong(seed: number, options: GenerateOptions): Song {
     arrangement.push({ lead: true, arp: isBreakdown ? !breakdownArpOff : true, drums: !isBreakdown });
   }
 
+  // Key change: on some long songs, lift the B-section bridge into a new key,
+  // then return home for the final A so the loop still joins seamlessly.
+  const keyShiftByBar = new Array<number>(totalBars).fill(0);
+  if (isLong && breakdownSection >= 0 && rng.chance(0.4)) {
+    const shift = rng.pick([2, 5, 3, -2]);
+    const start = firstMainBar + breakdownSection * SECTION_BARS;
+    for (let b = 0; b < SECTION_BARS; b++) keyShiftByBar[start + b] = shift;
+  }
+
   const ctx: SongContext = {
     rng,
     scale,
@@ -236,6 +251,7 @@ export function generateSong(seed: number, options: GenerateOptions): Song {
     arrangement,
     sections,
     variety,
+    keyShiftByBar,
   };
 
   const tracks: Track[] = [
@@ -275,7 +291,12 @@ function generateMelody(ctx: SongContext): NoteEvent[] {
     for (let b = 0; b < SECTION_BARS; b++) {
       const absoluteBar = section.startBar + b;
       if (!ctx.arrangement[absoluteBar].lead) continue;
-      for (const e of bars[b]) events.push({ ...e, tick: e.tick + absoluteBar * TICKS_PER_BAR });
+      const shift = ctx.keyShiftByBar[absoluteBar];
+      for (const e of bars[b]) {
+        const ev: NoteEvent = { ...e, tick: e.tick + absoluteBar * TICKS_PER_BAR, midiNote: e.midiNote + shift };
+        if (ev.glideFromMidi != null) ev.glideFromMidi += shift;
+        events.push(ev);
+      }
     }
   }
   return events;
@@ -362,8 +383,9 @@ function generateArpeggio(ctx: SongContext): NoteEvent[] {
 
   for (let bar = 0; bar < ctx.totalBars; bar++) {
     if (!arrangement[bar].arp) continue;
+    const shift = ctx.keyShiftByBar[bar];
     const triad = chordMidiNotes(rootMidi, scale, chordByBar[bar]);
-    const cycle = variety.arpShape(triad);
+    const cycle = variety.arpShape(triad).map((n) => n + shift);
     for (let beat = 0; beat < BEATS_PER_BAR; beat++) {
       events.push({
         tick: bar * TICKS_PER_BAR + beat * TICKS_PER_BEAT,
@@ -407,23 +429,26 @@ function generateBassAndDrums(ctx: SongContext, drumDensity: number, hatDensity:
   const kicks = new Set(variety.drums.kick);
   const snares = new Set(variety.drums.snare);
   const strongKick = new Set([0, 8]);
+  const snareInstrument = variety.snareSound === 'clap' ? DRUMS.clap : DRUMS.snare;
+  const TOM_PITCHES = [57, 53, 50, 47]; // descending tom fill
 
   for (let bar = 0; bar < ctx.totalBars; bar++) {
     const chordDeg = chordByBar[bar];
     const drumsOn = arrangement[bar].drums;
-    // A snare fill on the last bar of each 4-bar phrase, leading into the next.
+    // A fill on the last bar of each 4-bar phrase, leading into the next.
     const fillBar = drumsOn && (bar - firstMainBar) % SECTION_BARS === SECTION_BARS - 1;
 
     for (let i = 0; i < SIXTEENTHS; i++) {
       const tick = bar * TICKS_PER_BAR + i * SIXTEENTH;
 
       if (fillBar && i >= 12) {
+        const tom = variety.fillStyle === 'tom';
         events.push({
           tick,
           durationTicks: SIXTEENTH,
-          midiNote: 60,
-          velocity: 0.6 + (i - 12) * 0.13, // rises into the downbeat
-          instrument: DRUMS.snare,
+          midiNote: tom ? TOM_PITCHES[i - 12] : 60,
+          velocity: tom ? 0.9 : 0.6 + (i - 12) * 0.13,
+          instrument: tom ? DRUMS.tom : DRUMS.snare,
         });
         continue;
       }
@@ -440,7 +465,7 @@ function generateBassAndDrums(ctx: SongContext, drumDensity: number, hatDensity:
         continue;
       }
       if (drumsOn && snares.has(i)) {
-        events.push({ tick, durationTicks: EIGHTH, midiNote: 60, velocity: 1, instrument: DRUMS.snare });
+        events.push({ tick, durationTicks: EIGHTH, midiNote: 60, velocity: 1, instrument: snareInstrument });
         continue;
       }
 
@@ -450,7 +475,7 @@ function generateBassAndDrums(ctx: SongContext, drumDensity: number, hatDensity:
         events.push({
           tick,
           durationTicks: Math.max(1, slotTicks - 1),
-          midiNote: degreeToMidi(tonicMidi - 12, scale, deg),
+          midiNote: degreeToMidi(tonicMidi - 12, scale, deg) + ctx.keyShiftByBar[bar],
           velocity: i % 4 === 0 ? 1 : 0.85,
         });
         continue;

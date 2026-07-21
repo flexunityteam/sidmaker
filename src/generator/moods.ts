@@ -187,8 +187,18 @@ export const MOODS: Record<MoodName, MoodConfig> = {
 };
 
 /** Percussion, carried on the shared bass/drum voice as per-note overrides. */
-export const DRUMS: { kick: Instrument; snare: Instrument; hat: Instrument } = {
+export const DRUMS: {
+  kick: Instrument;
+  snare: Instrument;
+  hat: Instrument;
+  clap: Instrument;
+  tom: Instrument;
+} = {
   kick: { waveform: 'triangle', adsr: { a: 0.001, d: 0.09, s: 0, r: 0.03 }, gain: 0.5 },
   snare: { waveform: 'noise', adsr: { a: 0.001, d: 0.08, s: 0, r: 0.04 }, gain: 0.3 },
   hat: { waveform: 'noise', adsr: { a: 0.001, d: 0.025, s: 0, r: 0.015 }, gain: 0.14 },
+  clap: { waveform: 'noise', adsr: { a: 0.001, d: 0.09, s: 0, r: 0.06 }, gain: 0.26 },
+  // Pitched tom for fills; its MIDI note is set per hit (stays >= 45 so it
+  // doesn't trigger the kick's pitch sweep).
+  tom: { waveform: 'triangle', adsr: { a: 0.001, d: 0.13, s: 0, r: 0.05 }, gain: 0.4 },
 };

@@ -117,10 +117,11 @@ describe('musical features', () => {
     // First phrase ends on bar index 5 (2 intro + bars 0..3); its last beat.
     const fillBar = 5;
     const lastBeatStart = fillBar * barTicks + 3 * song.ticksPerBeat;
+    // The fill is a snare roll or a tom fill — either way, percussion hits.
     const fillHits = voice.events.filter(
-      (e) => e.tick >= lastBeatStart && e.tick < (fillBar + 1) * barTicks && e.instrument?.waveform === 'noise',
+      (e) => e.tick >= lastBeatStart && e.tick < (fillBar + 1) * barTicks && e.instrument?.adsr.s === 0,
     );
-    expect(fillHits.length).toBeGreaterThanOrEqual(3); // a little snare roll
+    expect(fillHits.length).toBeGreaterThanOrEqual(3);
   });
 
   it('intro bars have no drums (a build-up before the beat drops)', () => {

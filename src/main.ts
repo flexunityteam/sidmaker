@@ -76,6 +76,11 @@ app.innerHTML = `
       <button id="loadbtn">Load</button>
     </div>
 
+    <div class="history">
+      <button id="prev">&#9664; Prev</button>
+      <button id="next">Next &#9654;</button>
+    </div>
+
     <div class="status" id="status">Ready.<span class="cursor"></span></div>
     <div class="counter" id="counter"></div>
   </div>
@@ -112,6 +117,18 @@ const exportMp3Btn = document.getElementById('export-mp3') as HTMLButtonElement;
 const copyBtn = document.getElementById('copylink') as HTMLButtonElement;
 const seedInput = document.getElementById('seedinput') as HTMLInputElement;
 const loadBtn = document.getElementById('loadbtn') as HTMLButtonElement;
+const prevBtn = document.getElementById('prev') as HTMLButtonElement;
+const nextBtn = document.getElementById('next') as HTMLButtonElement;
+
+// Session history of tunes, so you can step back to one you just heard.
+type HistoryEntry = GenerateOptions & { seed: number };
+const history: HistoryEntry[] = [];
+let historyIndex = -1;
+
+function updateHistoryButtons(): void {
+  prevBtn.disabled = historyIndex <= 0;
+  nextBtn.disabled = historyIndex >= history.length - 1;
+}
 
 function setStatus(text: string): void {
   // textContent (not innerHTML) so status text can never inject markup.
@@ -144,10 +161,31 @@ function download(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+function playHistory(index: number): void {
+  historyIndex = index;
+  const entry = history[index];
+  selectors.mood(entry.mood);
+  selectors.tempo(entry.tempo);
+  selectors.length(entry.length);
+  state.song = generateSong(entry.seed, { mood: entry.mood, tempo: entry.tempo, length: entry.length });
+  playSong(state.song, `Tune ${index + 1} of ${history.length}:`);
+  updateHistoryButtons();
+}
+
 document.getElementById('generate')!.addEventListener('click', () => {
   const seed = (Math.random() * 0xffffffff) >>> 0;
   state.song = generateSong(seed, { mood: state.mood, tempo: state.tempo, length: state.length });
+  history.push({ mood: state.mood, tempo: state.tempo, length: state.length, seed });
+  historyIndex = history.length - 1;
   playSong(state.song, 'Now playing:');
+  updateHistoryButtons();
+});
+
+prevBtn.addEventListener('click', () => {
+  if (historyIndex > 0) playHistory(historyIndex - 1);
+});
+nextBtn.addEventListener('click', () => {
+  if (historyIndex < history.length - 1) playHistory(historyIndex + 1);
 });
 
 playStopBtn.addEventListener('click', () => {
@@ -210,6 +248,9 @@ function loadTune(tune: { mood: MoodName; tempo: TempoChoice; length: LengthChoi
   selectors.tempo(tune.tempo);
   selectors.length(tune.length);
   state.song = generateSong(tune.seed, { mood: tune.mood, tempo: tune.tempo, length: tune.length });
+  history.push({ mood: tune.mood, tempo: tune.tempo, length: tune.length, seed: tune.seed });
+  historyIndex = history.length - 1;
+  updateHistoryButtons();
   playStopBtn.textContent = 'Play';
   setStatus(`${prefix}\n${describe(state.song)}`);
 }
@@ -230,6 +271,7 @@ seedInput.addEventListener('keydown', (e) => {
 // block audio until the first click).
 const fromHash = parseShare(location.hash);
 if (fromHash) loadTune(fromHash, 'Loaded a shared tune - press play:');
+updateHistoryButtons();
 
 // Shared visit counter (a Cloudflare Pages Function backed by KV). Counts each
 // browser once per day; on any failure the line simply stays hidden.
