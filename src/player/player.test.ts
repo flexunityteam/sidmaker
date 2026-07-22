@@ -54,6 +54,17 @@ class FakeCtx {
   createBiquadFilter() {
     return { type: '', frequency: fakeParam(), connect() {}, disconnect() {} };
   }
+  createDynamicsCompressor() {
+    return {
+      threshold: fakeParam(),
+      knee: fakeParam(),
+      ratio: fakeParam(),
+      attack: fakeParam(),
+      release: fakeParam(),
+      connect() {},
+      disconnect() {},
+    };
+  }
   createOscillator() {
     const s = new FakeSource();
     this.createdSources.push(s);

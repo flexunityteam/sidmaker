@@ -101,7 +101,16 @@ export class Player {
       this.filter.type = 'lowpass';
       this.filter.frequency.value = 9000;
       this.filter.connect(this.master);
-      this.master.connect(ctx.destination);
+      // A gentle master compressor glues the mix and evens out song-to-song
+      // level so quiet tunes come up and loud ones don't clip.
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -14;
+      comp.knee.value = 6;
+      comp.ratio.value = 4;
+      comp.attack.value = 0.004;
+      comp.release.value = 0.16;
+      this.master.connect(comp);
+      comp.connect(ctx.destination);
       this.synth = {
         ctx,
         destination: this.filter,

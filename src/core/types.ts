@@ -60,6 +60,11 @@ export interface Instrument {
    * the same voice, the classic Hubbard bass-plus-percussion trick.
    */
   noiseAttack?: number;
+  /**
+   * Per-note filter, e.g. a highpass to make a noise snare/hat crisp and
+   * snappy instead of muddy — the SID filtered-drum sound.
+   */
+  filter?: { type: BiquadFilterType; freq: number };
 }
 
 export interface NoteEvent {

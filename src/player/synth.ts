@@ -138,9 +138,9 @@ function setNoteFrequency(
   instrument: Instrument,
 ): void {
   if (instrument.adsr.s === 0 && midiNote < 45) {
-    // Chip-style kick: short envelope at low pitch gets a downward sweep.
-    osc.frequency.setValueAtTime(freq * 3, time);
-    osc.frequency.exponentialRampToValueAtTime(freq, time + 0.06);
+    // Chip-style kick: a punchy downward pitch sweep on the attack.
+    osc.frequency.setValueAtTime(freq * 4, time);
+    osc.frequency.exponentialRampToValueAtTime(freq, time + 0.05);
   } else if (glideFrom != null) {
     osc.frequency.setValueAtTime(midiToFreq(glideFrom), time);
     osc.frequency.exponentialRampToValueAtTime(freq, time + Math.min(0.06, duration * 0.4));
@@ -166,7 +166,16 @@ export function scheduleTone(
   glideFrom?: number,
 ): void {
   const envelope = t.ctx.createGain();
-  envelope.connect(t.destination);
+  let noteFilter: BiquadFilterNode | null = null;
+  if (instrument.filter) {
+    noteFilter = t.ctx.createBiquadFilter();
+    noteFilter.type = instrument.filter.type;
+    noteFilter.frequency.value = instrument.filter.freq;
+    envelope.connect(noteFilter);
+    noteFilter.connect(t.destination);
+  } else {
+    envelope.connect(t.destination);
+  }
   applyAdsr(envelope, instrument, velocity, time, duration);
   const stopTime = time + duration + instrument.adsr.r + 0.05;
 
@@ -270,7 +279,10 @@ export function scheduleTone(
     source = osc;
   }
 
-  source.addEventListener('ended', () => envelope.disconnect());
+  source.addEventListener('ended', () => {
+    envelope.disconnect();
+    noteFilter?.disconnect();
+  });
   source.start(time);
   source.stop(stopTime);
   t.onSource?.(source);

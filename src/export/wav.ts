@@ -72,7 +72,14 @@ export async function renderSong(song: Song, loops = 2, sampleRate = 44100): Pro
   filter.type = 'lowpass';
   filter.frequency.value = 9000;
   filter.connect(master);
-  master.connect(ctx.destination);
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -14;
+  comp.knee.value = 6;
+  comp.ratio.value = 4;
+  comp.attack.value = 0.004;
+  comp.release.value = 0.16;
+  master.connect(comp);
+  comp.connect(ctx.destination);
   connectFilterSweep(ctx, filter, song.filter, 0);
 
   const targets: SynthTargets = {
