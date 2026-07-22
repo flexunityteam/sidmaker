@@ -36,6 +36,7 @@ export const MOODS: Record<MoodName, MoodConfig> = {
       adsr: { a: 0.01, d: 0.09, s: 0.65, r: 0.09 },
       gain: 0.3,
       vibrato: { rateHz: 6, depthCents: 26, delaySec: 0.18 },
+      pwm: { rateHz: 4, minWidth: 0.15, maxWidth: 0.42 },
     },
     arp: {
       waveform: 'pulse',
@@ -60,6 +61,7 @@ export const MOODS: Record<MoodName, MoodConfig> = {
       adsr: { a: 0.01, d: 0.08, s: 0.6, r: 0.09 },
       gain: 0.28,
       vibrato: { rateHz: 5.5, depthCents: 32, delaySec: 0.2 },
+      pwm: { rateHz: 2.5, minWidth: 0.1, maxWidth: 0.35 },
     },
     arp: {
       waveform: 'pulse',
@@ -84,6 +86,7 @@ export const MOODS: Record<MoodName, MoodConfig> = {
       adsr: { a: 0.004, d: 0.06, s: 0.5, r: 0.05 },
       gain: 0.28,
       vibrato: { rateHz: 7, depthCents: 18, delaySec: 0.12 },
+      pwm: { rateHz: 6, minWidth: 0.1, maxWidth: 0.35 },
     },
     arp: {
       waveform: 'pulse',
@@ -152,6 +155,7 @@ export const MOODS: Record<MoodName, MoodConfig> = {
       adsr: { a: 0.02, d: 0.1, s: 0.7, r: 0.14 },
       gain: 0.3,
       vibrato: { rateHz: 5.5, depthCents: 24, delaySec: 0.22 },
+      pwm: { rateHz: 3, minWidth: 0.2, maxWidth: 0.5 },
     },
     arp: {
       waveform: 'pulse',

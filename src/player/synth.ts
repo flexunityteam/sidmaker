@@ -128,6 +128,27 @@ function attachVibrato(t: SynthTargets, osc: OscillatorNode, instrument: Instrum
   t.onSource?.(lfo);
 }
 
+function setNoteFrequency(
+  osc: OscillatorNode,
+  freq: number,
+  midiNote: number,
+  glideFrom: number | undefined,
+  time: number,
+  duration: number,
+  instrument: Instrument,
+): void {
+  if (instrument.adsr.s === 0 && midiNote < 45) {
+    // Chip-style kick: short envelope at low pitch gets a downward sweep.
+    osc.frequency.setValueAtTime(freq * 3, time);
+    osc.frequency.exponentialRampToValueAtTime(freq, time + 0.06);
+  } else if (glideFrom != null) {
+    osc.frequency.setValueAtTime(midiToFreq(glideFrom), time);
+    osc.frequency.exponentialRampToValueAtTime(freq, time + Math.min(0.06, duration * 0.4));
+  } else {
+    osc.frequency.setValueAtTime(freq, time);
+  }
+}
+
 /** A single note: pulse/triangle/saw or noise, with optional vibrato and glide. */
 export function scheduleTone(
   t: SynthTargets,
@@ -150,20 +171,55 @@ export function scheduleTone(
     src.loop = true;
     src.connect(envelope);
     source = src;
+  } else if (instrument.pwm && !instrument.ringMod && instrument.waveform === 'pulse') {
+    // Pulse-width modulation: two pulse oscillators at different duty cycles,
+    // crossfaded by an LFO, so the timbre sweeps — the breathing SID lead.
+    const freq = midiToFreq(midiNote);
+    const oscA = t.ctx.createOscillator();
+    oscA.setPeriodicWave(getPulseWave(t.ctx, t.pulseWaves, instrument.pwm.minWidth));
+    const oscB = t.ctx.createOscillator();
+    oscB.setPeriodicWave(getPulseWave(t.ctx, t.pulseWaves, instrument.pwm.maxWidth));
+    setNoteFrequency(oscA, freq, midiNote, glideFrom, time, duration, instrument);
+    setNoteFrequency(oscB, freq, midiNote, glideFrom, time, duration, instrument);
+    const gA = t.ctx.createGain();
+    gA.gain.value = 0.5;
+    const gB = t.ctx.createGain();
+    gB.gain.value = 0.5;
+    const lfo = t.ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = instrument.pwm.rateHz;
+    const dA = t.ctx.createGain();
+    dA.gain.value = 0.5;
+    const dB = t.ctx.createGain();
+    dB.gain.value = -0.5;
+    lfo.connect(dA);
+    dA.connect(gA.gain);
+    lfo.connect(dB);
+    dB.connect(gB.gain);
+    oscA.connect(gA);
+    gA.connect(envelope);
+    oscB.connect(gB);
+    gB.connect(envelope);
+    attachVibrato(t, oscA, instrument, time, stopTime);
+    attachVibrato(t, oscB, instrument, time, stopTime);
+    lfo.start(time);
+    lfo.stop(stopTime);
+    oscB.start(time);
+    oscB.stop(stopTime);
+    oscB.addEventListener('ended', () => {
+      gB.disconnect();
+      dB.disconnect();
+    });
+    lfo.addEventListener('ended', () => dA.disconnect());
+    oscA.addEventListener('ended', () => gA.disconnect());
+    t.onSource?.(oscB);
+    t.onSource?.(lfo);
+    source = oscA;
   } else {
     const osc = t.ctx.createOscillator();
     setWaveform(t, osc, instrument);
     const freq = midiToFreq(midiNote);
-    if (instrument.adsr.s === 0 && midiNote < 45) {
-      // Chip-style kick: short envelope at low pitch gets a downward sweep.
-      osc.frequency.setValueAtTime(freq * 3, time);
-      osc.frequency.exponentialRampToValueAtTime(freq, time + 0.06);
-    } else if (glideFrom != null) {
-      osc.frequency.setValueAtTime(midiToFreq(glideFrom), time);
-      osc.frequency.exponentialRampToValueAtTime(freq, time + Math.min(0.06, duration * 0.4));
-    } else {
-      osc.frequency.setValueAtTime(freq, time);
-    }
+    setNoteFrequency(osc, freq, midiNote, glideFrom, time, duration, instrument);
     attachVibrato(t, osc, instrument, time, stopTime);
     if (instrument.ringMod) {
       // Ring modulation: gain of a mixer node is driven by a modulator osc,

@@ -45,6 +45,11 @@ export interface Instrument {
    * `depth` 0..1 blends dry (0) to full ring (1).
    */
   ringMod?: { ratio: number; depth: number };
+  /**
+   * Pulse-width modulation: sweeps the pulse duty between minWidth and
+   * maxWidth at rateHz — the breathing SID lead. Only meaningful for 'pulse'.
+   */
+  pwm?: { rateHz: number; minWidth: number; maxWidth: number };
 }
 
 export interface NoteEvent {
