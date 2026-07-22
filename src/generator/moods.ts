@@ -87,6 +87,7 @@ export const MOODS: Record<MoodName, MoodConfig> = {
       gain: 0.28,
       vibrato: { rateHz: 7, depthCents: 18, delaySec: 0.12 },
       pwm: { rateHz: 6, minWidth: 0.1, maxWidth: 0.35 },
+      pitchAttack: [12, 0],
     },
     arp: {
       waveform: 'pulse',

@@ -201,6 +201,8 @@ export function generateSong(seed: number, options: GenerateOptions): Song {
     ...jitterPulse(mood.arp),
     arpRateHz: clamp((mood.arp.arpRateHz ?? 36) + rng.range(-4, 6), 22, 48),
   };
+  // Some songs get a shaker layered on the bass (Hubbard bass-plus-hihat trick).
+  const bassInst: Instrument = rng.chance(0.4) ? { ...mood.bass, noiseAttack: 0.07 } : mood.bass;
 
   // Song form: an A/B arrangement so tunes have a verse/chorus contrast.
   const isLong = options.length === 'long';
@@ -261,7 +263,7 @@ export function generateSong(seed: number, options: GenerateOptions): Song {
   const tracks: Track[] = [
     { name: 'lead', instrument: leadInst, events: generateMelody(ctx) },
     { name: 'arp', instrument: arpInst, events: generateArpeggio(ctx) },
-    { name: 'bass+drums', instrument: mood.bass, events: generateBassAndDrums(ctx, mood.drumDensity, mood.hatDensity) },
+    { name: 'bass+drums', instrument: bassInst, events: generateBassAndDrums(ctx, mood.drumDensity, mood.hatDensity) },
   ];
 
   return { bpm, ticksPerBeat: TICKS_PER_BEAT, lengthTicks: totalBars * TICKS_PER_BAR, tracks, seed, swing, filter };

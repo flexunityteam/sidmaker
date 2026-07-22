@@ -144,6 +144,12 @@ function setNoteFrequency(
   } else if (glideFrom != null) {
     osc.frequency.setValueAtTime(midiToFreq(glideFrom), time);
     osc.frequency.exponentialRampToValueAtTime(freq, time + Math.min(0.06, duration * 0.4));
+  } else if (instrument.pitchAttack && instrument.pitchAttack.length > 0) {
+    const frame = 1 / 50;
+    instrument.pitchAttack.forEach((semi, k) => {
+      osc.frequency.setValueAtTime(freq * Math.pow(2, semi / 12), time + k * frame);
+    });
+    osc.frequency.setValueAtTime(freq, time + instrument.pitchAttack.length * frame);
   } else {
     osc.frequency.setValueAtTime(freq, time);
   }
@@ -163,6 +169,22 @@ export function scheduleTone(
   envelope.connect(t.destination);
   applyAdsr(envelope, instrument, velocity, time, duration);
   const stopTime = time + duration + instrument.adsr.r + 0.05;
+
+  // Hi-hat/shaker layered on the attack — bass + percussion from one voice.
+  if (instrument.noiseAttack && instrument.waveform !== 'noise') {
+    const hatEnv = t.ctx.createGain();
+    hatEnv.connect(t.destination);
+    hatEnv.gain.setValueAtTime(instrument.noiseAttack * velocity, time);
+    hatEnv.gain.exponentialRampToValueAtTime(0.0001, time + 0.03);
+    const hat = t.ctx.createBufferSource();
+    hat.buffer = t.noiseBuffer;
+    hat.loop = true;
+    hat.connect(hatEnv);
+    hat.start(time);
+    hat.stop(time + 0.05);
+    hat.addEventListener('ended', () => hatEnv.disconnect());
+    t.onSource?.(hat);
+  }
 
   let source: AudioScheduledSourceNode;
   if (instrument.waveform === 'noise') {

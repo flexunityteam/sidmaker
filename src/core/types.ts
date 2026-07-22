@@ -50,6 +50,16 @@ export interface Instrument {
    * maxWidth at rateHz — the breathing SID lead. Only meaningful for 'pulse'.
    */
   pwm?: { rateHz: number; minWidth: number; maxWidth: number };
+  /**
+   * A wavetable-style pitch blip on the attack: semitone offsets applied one
+   * per ~50Hz frame at note start before settling to pitch (a SID "zap").
+   */
+  pitchAttack?: number[];
+  /**
+   * Layers a short noise burst on each note's attack — a hi-hat/shaker from
+   * the same voice, the classic Hubbard bass-plus-percussion trick.
+   */
+  noiseAttack?: number;
 }
 
 export interface NoteEvent {
