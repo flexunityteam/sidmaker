@@ -411,14 +411,22 @@ function bassDegree(style: BassStyle, chordDeg: number, i: number): number | nul
   switch (style) {
     case 'root8':
       if (eighth < 0) return null;
-      return eighth % 2 === 1 ? chordDeg + 7 : chordDeg; // root / octave
+      return eighth % 2 === 1 ? chordDeg + 7 : chordDeg; // root / octave bounce
     case 'octave16':
-      return i % 2 === 0 ? chordDeg : chordDeg + 7; // driving sixteenths
+      return i % 2 === 0 ? chordDeg : chordDeg + 7; // driving octave sixteenths
     case 'hubbard': {
       if (eighth < 0) return null;
       const seq = [chordDeg, chordDeg, chordDeg + 4, chordDeg + 7, chordDeg, chordDeg + 6, chordDeg + 4, chordDeg];
-      return seq[eighth];
+      return seq[eighth]; // running fifth/seventh/octave line
     }
+    case 'walk': {
+      if (eighth < 0) return null;
+      const seq = [0, 1, 2, 3, 4, 3, 2, 1]; // stepwise up to the fifth and back
+      return chordDeg + seq[eighth];
+    }
+    case 'pedal':
+      if (eighth < 0) return null;
+      return chordDeg; // steady root pulse, no octave
   }
 }
 
