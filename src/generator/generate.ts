@@ -192,7 +192,11 @@ export function generateSong(seed: number, options: GenerateOptions): Song {
     inst.waveform === 'pulse'
       ? { ...inst, pulseWidth: clamp((inst.pulseWidth ?? 0.5) + rng.pick([-0.05, 0, 0, 0.05, 0.1]), 0.08, 0.5) }
       : inst;
-  const leadInst = jitterPulse(mood.lead);
+  let leadInst = jitterPulse(mood.lead);
+  // Ring-modulated metallic lead for some Boss/Dark tunes.
+  if ((options.mood === 'boss' || options.mood === 'dark') && rng.chance(0.5)) {
+    leadInst = { ...leadInst, ringMod: { ratio: rng.pick([1.5, 2.01, 0.5, 3.01]), depth: rng.pick([0.3, 0.4, 0.5]) } };
+  }
   const arpInst: Instrument = {
     ...jitterPulse(mood.arp),
     arpRateHz: clamp((mood.arp.arpRateHz ?? 36) + rng.range(-4, 6), 22, 48),

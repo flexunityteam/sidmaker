@@ -39,6 +39,12 @@ export interface Instrument {
    * pitch steps through the chord — the signature C64 chord shimmer.
    */
   arpRateHz?: number;
+  /**
+   * Ring modulation: multiplies the tone by a modulator oscillator at
+   * `ratio` times the note frequency, for metallic/clangorous SID timbres.
+   * `depth` 0..1 blends dry (0) to full ring (1).
+   */
+  ringMod?: { ratio: number; depth: number };
 }
 
 export interface NoteEvent {

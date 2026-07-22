@@ -165,7 +165,30 @@ export function scheduleTone(
       osc.frequency.setValueAtTime(freq, time);
     }
     attachVibrato(t, osc, instrument, time, stopTime);
-    osc.connect(envelope);
+    if (instrument.ringMod) {
+      // Ring modulation: gain of a mixer node is driven by a modulator osc,
+      // so the tone is multiplied by it -> metallic, clangorous timbre.
+      const ring = t.ctx.createGain();
+      ring.gain.setValueAtTime(1 - instrument.ringMod.depth, time);
+      const mod = t.ctx.createOscillator();
+      mod.type = 'square';
+      mod.frequency.setValueAtTime(freq * instrument.ringMod.ratio, time);
+      const modGain = t.ctx.createGain();
+      modGain.gain.value = instrument.ringMod.depth;
+      mod.connect(modGain);
+      modGain.connect(ring.gain);
+      osc.connect(ring);
+      ring.connect(envelope);
+      mod.start(time);
+      mod.stop(stopTime);
+      mod.addEventListener('ended', () => {
+        modGain.disconnect();
+        ring.disconnect();
+      });
+      t.onSource?.(mod);
+    } else {
+      osc.connect(envelope);
+    }
     source = osc;
   }
 
