@@ -45,7 +45,8 @@ app.innerHTML = `
         Own games stay on your device.<span class="cursor"></span>
       </div>
       <div class="counter">
-        Tip: legal free C64 games live at csdb.dk (PD releases) and itch.io.
+        Controls: ARROW KEYS steer, FIRE button shoots. Open the &#9776; menu
+        to see or remap the keys. &middot; Free games: csdb.dk, itch.io.
       </div>
     </div>
 
