@@ -62,7 +62,7 @@ export async function renderSong(song: Song, loops = 2, sampleRate = 44100): Pro
   const secondsPerTick = 60 / song.bpm / song.ticksPerBeat;
   const loopSec = song.lengthTicks * secondsPerTick;
   const lead = 0.02; // tiny head start so nothing clicks at t=0
-  const tail = 0.4; // let final release ring out
+  const tail = 1.2; // let the final release and echo tail ring out
   const totalSec = lead + loopSec * loops + tail;
 
   const ctx = new OfflineAudioContext(1, Math.ceil(totalSec * sampleRate), sampleRate);
@@ -82,9 +82,24 @@ export async function renderSong(song: Song, loops = 2, sampleRate = 44100): Pro
   comp.connect(ctx.destination);
   connectFilterSweep(ctx, filter, song.filter, 0);
 
+  // Echo/delay send for the lead voice.
+  const delay = ctx.createDelay(1.5);
+  delay.delayTime.value = Math.min(song.echo.timeSec, 1.5);
+  const delayFeedback = ctx.createGain();
+  delayFeedback.gain.value = song.echo.feedback;
+  const delayWet = ctx.createGain();
+  delayWet.gain.value = song.echo.wet;
+  const echoInput = ctx.createGain();
+  echoInput.connect(delay);
+  delay.connect(delayFeedback);
+  delayFeedback.connect(delay);
+  delay.connect(delayWet);
+  delayWet.connect(master);
+
   const targets: SynthTargets = {
     ctx,
     destination: filter,
+    echoSend: echoInput,
     noiseBuffer: createNoiseBuffer(ctx),
     pulseWaves: new Map(),
   };

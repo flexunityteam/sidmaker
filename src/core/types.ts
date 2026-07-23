@@ -65,6 +65,8 @@ export interface Instrument {
    * snappy instead of muddy — the SID filtered-drum sound.
    */
   filter?: { type: BiquadFilterType; freq: number };
+  /** Routes this voice to the song's echo/delay send (used on the lead). */
+  echo?: boolean;
 }
 
 export interface NoteEvent {
@@ -115,6 +117,17 @@ export interface Song {
   swing: number;
   /** Slow low-pass filter sweep on the master bus, for movement. */
   filter: FilterSweep;
+  /** Tempo-synced echo/delay applied to the lead voice (wet 0 = off). */
+  echo: Echo;
+}
+
+export interface Echo {
+  /** Delay time in seconds (usually synced to the beat) */
+  timeSec: number;
+  /** Feedback 0..1 (how many repeats) */
+  feedback: number;
+  /** Wet mix 0..1 (0 disables the echo) */
+  wet: number;
 }
 
 export interface FilterSweep {

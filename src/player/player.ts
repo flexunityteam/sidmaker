@@ -25,6 +25,9 @@ export class Player {
   private nextEventIndex = 0;
   private sortedEvents: Array<NoteEvent & { trackInstrument: Instrument }> = [];
   private activeSources = new Set<AudioScheduledSourceNode>();
+  private delay: DelayNode | null = null;
+  private delayFeedback: GainNode | null = null;
+  private delayWet: GainNode | null = null;
   private createAudioContext: AudioContextFactory;
 
   constructor(createAudioContext: AudioContextFactory = () => new AudioContext()) {
@@ -49,6 +52,12 @@ export class Player {
     if (this.master) {
       this.master.gain.cancelScheduledValues(ctx.currentTime);
       this.master.gain.setValueAtTime(Player.MASTER_GAIN, ctx.currentTime);
+    }
+
+    if (this.delay && this.delayFeedback && this.delayWet) {
+      this.delay.delayTime.setValueAtTime(Math.min(song.echo.timeSec, 1.5), ctx.currentTime);
+      this.delayFeedback.gain.setValueAtTime(song.echo.feedback, ctx.currentTime);
+      this.delayWet.gain.setValueAtTime(song.echo.wet, ctx.currentTime);
     }
 
     // Fresh filter sweep for this song; tracked so stop() tears it down.
@@ -111,9 +120,23 @@ export class Player {
       comp.release.value = 0.16;
       this.master.connect(comp);
       comp.connect(ctx.destination);
+      // Echo/delay send for the lead voice (params set per song in play()).
+      const delay = ctx.createDelay(1.5);
+      this.delay = delay;
+      this.delayFeedback = ctx.createGain();
+      this.delayFeedback.gain.value = 0;
+      this.delayWet = ctx.createGain();
+      this.delayWet.gain.value = 0;
+      const echoInput = ctx.createGain();
+      echoInput.connect(delay);
+      delay.connect(this.delayFeedback);
+      this.delayFeedback.connect(delay);
+      delay.connect(this.delayWet);
+      this.delayWet.connect(this.master);
       this.synth = {
         ctx,
         destination: this.filter,
+        echoSend: echoInput,
         noiseBuffer: createNoiseBuffer(ctx),
         pulseWaves: new Map(),
         onSource: (src) => {

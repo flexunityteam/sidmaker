@@ -12,6 +12,8 @@ export interface SynthTargets {
   noiseBuffer: AudioBuffer;
   /** Duty-cycle -> band-limited pulse wave, cached per context. */
   pulseWaves: Map<number, PeriodicWave>;
+  /** Input to the song's echo/delay send; voices with `echo` route here too. */
+  echoSend?: AudioNode;
   /**
    * Called for every scheduled source. The realtime Player uses it to track
    * sources for deterministic teardown; the offline exporter omits it.
@@ -175,6 +177,9 @@ export function scheduleTone(
     noteFilter.connect(t.destination);
   } else {
     envelope.connect(t.destination);
+  }
+  if (instrument.echo && t.echoSend) {
+    (noteFilter ?? envelope).connect(t.echoSend);
   }
   applyAdsr(envelope, instrument, velocity, time, duration);
   const stopTime = time + duration + instrument.adsr.r + 0.05;

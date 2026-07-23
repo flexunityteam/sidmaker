@@ -54,6 +54,9 @@ class FakeCtx {
   createBiquadFilter() {
     return { type: '', frequency: fakeParam(), connect() {}, disconnect() {} };
   }
+  createDelay() {
+    return { delayTime: fakeParam(), connect() {}, disconnect() {} };
+  }
   createDynamicsCompressor() {
     return {
       threshold: fakeParam(),

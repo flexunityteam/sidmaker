@@ -175,6 +175,16 @@ export function generateSong(seed: number, options: GenerateOptions): Song {
     rateHz: fbase.rateHz,
   };
 
+  // Tempo-synced echo on the lead — classic SID software delay. ~75% of songs.
+  const beatSec = 60 / bpm;
+  const echo = rng.chance(0.75)
+    ? {
+        timeSec: beatSec * rng.pick([0.5, 0.75, 0.375]), // eighth / dotted-eighth / sixteenth-ish
+        feedback: rng.pick([0.28, 0.34, 0.4]),
+        wet: rng.pick([0.2, 0.26, 0.3]),
+      }
+    : { timeSec: beatSec * 0.5, feedback: 0, wet: 0 };
+
   const variety: Variety = {
     bassStyle: rng.pick(mood.bassStyles),
     drums: rng.pick(DRUM_PATTERNS),
@@ -192,7 +202,7 @@ export function generateSong(seed: number, options: GenerateOptions): Song {
     inst.waveform === 'pulse'
       ? { ...inst, pulseWidth: clamp((inst.pulseWidth ?? 0.5) + rng.pick([-0.05, 0, 0, 0.05, 0.1]), 0.08, 0.5) }
       : inst;
-  let leadInst = jitterPulse(mood.lead);
+  let leadInst: Instrument = { ...jitterPulse(mood.lead), echo: true };
   // Ring-modulated metallic lead for some Boss/Dark tunes.
   if ((options.mood === 'boss' || options.mood === 'dark') && rng.chance(0.5)) {
     leadInst = { ...leadInst, ringMod: { ratio: rng.pick([1.5, 2.01, 0.5, 3.01]), depth: rng.pick([0.3, 0.4, 0.5]) } };
@@ -266,7 +276,7 @@ export function generateSong(seed: number, options: GenerateOptions): Song {
     { name: 'bass+drums', instrument: bassInst, events: generateBassAndDrums(ctx, mood.drumDensity, mood.hatDensity) },
   ];
 
-  return { bpm, ticksPerBeat: TICKS_PER_BEAT, lengthTicks: totalBars * TICKS_PER_BAR, tracks, seed, swing, filter };
+  return { bpm, ticksPerBeat: TICKS_PER_BEAT, lengthTicks: totalBars * TICKS_PER_BAR, tracks, seed, swing, filter, echo };
 }
 
 // ---------------------------------------------------------------------------

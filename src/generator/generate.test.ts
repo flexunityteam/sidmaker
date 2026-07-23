@@ -47,8 +47,8 @@ describe('generateSong', () => {
       const pitchClasses = new Set<number>();
       for (const track of song.tracks) {
         for (const e of track.events) {
-          if ((e.instrument ?? track.instrument).waveform === 'noise') continue;
-          if (e.midiNote < 45 && (e.instrument?.adsr.s ?? 1) === 0) continue; // kick
+          if (e.instrument) continue; // per-note override => percussion (fixed pitch)
+          if (track.instrument.waveform === 'noise') continue;
           pitchClasses.add(e.midiNote % 12);
         }
       }
